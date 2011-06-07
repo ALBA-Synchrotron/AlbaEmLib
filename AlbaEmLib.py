@@ -4,7 +4,7 @@ import sys
 #import pyIcePAP
 import time
 import PyTango
-from pylab import *
+#from pylab import *
 import array
 from scipy.stats import *
 import socket
