@@ -43,7 +43,7 @@ class albaem():
     def ask(self, cmd, size=8192):
         try:
             #fd = open(self.logFileName, 'a')
-            #self.lock.acquire()
+            self.lock.acquire()
             #print "------>lock acquired------"
             #stringToSave = str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
             self.sock.sendto(cmd, (self.host, self.port))
