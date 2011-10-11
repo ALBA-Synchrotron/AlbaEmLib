@@ -353,29 +353,30 @@ class albaem():
             print "setPoints: %s"%(e)
         if self.DEBUG:
             print "setPoints: SEND: %s\t RCVD: %s"%(command, answer)
-    def getTrigperiode(self):
+    def getTrigperiod(self):
         try:
             command = '?TRIGPERIODE'
-            if self.DEBUG: print 'getTrigperiode: Sending command...'
+            if self.DEBUG: print 'getTrigperiod: Sending command...'
             answer = self.ask(command)
             trigperiode = self.extractSimple(answer)
         except Exception, e:
-            print "getTrigperiode: %s"%(e)
+            print "getTrigperiod: %s"%(e)
             return None
         if self.DEBUG:
-            print "getTrigperiode: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getTrigperiode: %s"%(trigperiode)
+            print "getTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
+            print "getTrigperiod: %s"%(trigperiode)
         return trigperiode
-    def setTrigperiode(self, trigperiode):
+    def setTrigperiod(self, trigperiod):
         try: 
-            command = 'TRIGPERIODE %s'%(trigperiode)
+            command = 'TRIGPERIODE %s'%(trigperiod)
             answer = self.ask(command)
             if answer != 'TRIGPERIODE ACK\x00':
-                raise Exception('setTrigperiode: Wrong acknowledge')
+                raise Exception('setTrigperiod: Wrong acknowledge')
         except Exception, e:
-            print "setTrigperiode: %s"%(e)
+            print "setTrigperiod: %s"%(e)
         if self.DEBUG:
-            print "setTrigperiode: SEND: %s\t RCVD: %s"%(command, answer)
+            print "setTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
+
     def getSrate(self):
         try:
             command = '?SRATE'
@@ -388,6 +389,7 @@ class albaem():
             print "getSrate: SEND: %s\t RCVD: %s"%(command, answer)
             print "getSrate: %s"%(srate)
         return srate
+
     def setSrate(self, srate):
         try: 
             command = 'SRATE %s'%(srate)
@@ -444,6 +446,30 @@ class albaem():
             print "Start: %s"%(e)
         if self.DEBUG:
             print "Start: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def StartAdc(self):
+        try: 
+            command = 'STARTADC'
+            answer = self.ask(command)
+            if answer != 'STARTADC ACK\x00':
+                raise Exception('StartAdc: Wrong acknowledge')
+        except Exception, e:
+            print "StartAdc: %s"%(e)
+        if self.DEBUG:
+            print "StartAdc: SEND: %s\t RCVD: %s"%(command, answer)
+
+
+    def StopAdc(self):
+        try: 
+            command = 'STOPADC'
+            answer = self.ask(command)
+            if answer != 'STOPADC ACK\x00':
+                raise Exception('StopAdc: Wrong acknowledge')
+        except Exception, e:
+            print "StopAdc: %s"%(e)
+        if self.DEBUG:
+            print "StopAdc: SEND: %s\t RCVD: %s"%(command, answer)
+
     def Stop(self):
         try: 
             command = 'STOP'
@@ -476,7 +502,7 @@ if __name__ == "__main__":
     if emu:    myalbaem.savechain('?ENABLE 1 YES 2 YES 3 YES 4 YES')
     print myalbaem.getEnables(['1', '2', '3','4'])
     #if emu:    myalbaem.savechain('?TRIGPERIODE 10')
-    #print myalbaem.getTrigperiode()
+    #print myalbaem.getTrigperiod()
     if emu:    myalbaem.savechain('START ACK')
     print myalbaem.Start()
     #if emu:    myalbaem.savechain('START ACK\x00')
