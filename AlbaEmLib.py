@@ -10,10 +10,20 @@ from scipy.stats import *
 import socket
 import datetime
 
-from threading import Lock
+from threading import Lock, Thread
 
+class ReconnectThread(Thread):
+    def __init__(self, albaEm, sleepTime):
+        Thread.__init__(self)
+        self.albaEm = albaEm 
+        self.sleepTime = sleepTime
 
-#tango://localhost:10000/ws/bl01/serial0
+    def run(self):
+        while True:
+            if not self.albaEm.connected:
+                self.albaEm.tryToConnect()
+            time.sleep(self.sleepTime)
+
 class albaem():
     ''' The configuration of the serial line is: 8bits + 1 stopbit, bdr: 9600, terminator:none'''
     ''' The cable is crossed'''
@@ -21,18 +31,18 @@ class albaem():
     DEBUG = False
 
     def __init__(self, host, port=7):
+        self.connected = True #Todo: This variable is not needed anymore and the ReconnectThread neither.
         self.DEBUG = False
         self.host = host
         self.port = port
         self.lock = Lock()
+        
+#        self.reconnect_thread = ReconnectThread(self, 2)
+#        self.reconnect_thread.setDaemon(True)
+#        self.reconnect_thread.start()
+        
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(1)
-
-        #self.logFileName = 'albaemlib.log'
-        #fd = open(self.logFileName, 'a')
-        #stringToSave ='\n\n-----New Instance at: ' + str(datetime.datetime.now()) + '-----\n' 
-        #fd.write(stringToSave)
-        #fd.close()
+        self.sock.settimeout(0.1)
 
     def savechain(self, savedchain):
         self.savedchain = savedchain+'\x00'
@@ -40,54 +50,38 @@ class albaem():
     def ask2(self, cmd, size=8192):
         print "ask: %s"%self.savedchain
         return self.savedchain
+
     def ask(self, cmd, size=8192):
         try:
-            #fd = open(self.logFileName, 'a')
             self.lock.acquire()
-            #print "------>lock acquired------"
-            #stringToSave = str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
-            self.sock.sendto(cmd, (self.host, self.port))
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->    Command sended\n'
-            #print "----------->command sended"
-            data = self.sock.recv(size)
-            #print "----------->received data"
-            # SHOULD MAKE SURE ALL DATA IS RECEIVED data.endswith('\x00')?
+            if self.connected:
+                self.sock.sendto(cmd, (self.host, self.port))
+                data = self.sock.recv(size)
+            else:
+                raise Exception('Device not found!')
             if self.DEBUG:
                 print 'AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data)
-            #if not data.endswith('\x00'):
-	        #print "null char missing, releasing lock..."
- 	        #self.lock.release() #This lock might not be necessary, the last except catches the generated exception unlocks and prints the causing exception. If we unlock here, then there's a double unlock exception and the heredown generated doesn't show up
-            #    raise Exception('Wrong termination' , data)
-            #print "Normal lock release"
-            #self.lock.release()
             return data
          
         except socket.timeout, timeout:
-            #self.lock.release()
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Timeout Error\n'
-            #fd.write(stringToSave)
-            print 'Timeout Error'
-            return '100'
-            raise Exception('Socket timeout', timeout)
+            try:
+                if self.connected:
+                    self.sock.sendto(cmd, (self.host, self.port))
+                    data = self.sock.recv(size)
+                else:
+                    raise Exception('Device not found!')
+                return data
+            except Exception, e:
+                print 'Timeout Error'
+                return 'Socket timeout'
         except socket.error, error:
-            #self.lock.release()
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Socket Error\n'
-            #fd.write(stringToSave)
             print 'Socket Error'
-            return '200'
-            raise Exception('Socket error', error)
+            return 'Socket Error'
         except Exception, e:
             print 'Unknown Error'
-            return '300'
-            #self.lock.release()
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Unknown Error\n'
-            #fd.write(stringToSave)
-            raise Exception('Unknown exception', e)
+            return 'Unknown Exception'
         finally:
-            #fd.close()
             self.lock.release()
-            #return '400'
-            #print "------>lock released------"
 
     def extractMultichannel(self, chain, initialpos):
         answersplit = chain.strip('\x00').split(' ')
@@ -110,6 +104,7 @@ class albaem():
             return couples, status
         else: 
             return couples
+
     def extractSimple(self, chain):
         return chain.strip('\x00').split(' ')[1]
 
@@ -131,7 +126,11 @@ class albaem():
             print "getRanges: SEND: %s\t RCVD: %s"%(command, answer)
             print "getRanges: %s"%(ranges)
         return ranges
-    def setRanges(self, ranges):
+
+    def getRangesAll(self):
+        self.getRanges(['1', '2', '3', '4'])
+
+    def _setRanges(self, ranges):
         channelchain = ''
         '''
         try: 
@@ -151,6 +150,17 @@ class albaem():
             print "setRanges: %s"%(e)
         if self.DEBUG:
             print "setRanges: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setRanges(self, ranges):
+        self.StopAdc()
+        self._setRanges(ranges)
+        self.StartAdc()
+
+    def setRangesAll(self, range):
+        self.StopAdc()
+        self.setRanges([['1', range], ['2', range], ['3', range], ['4', range]])
+        self.StartAdc()
+
     def getEnables(self, channels):
         channelchain = ''
         for channel in channels:
@@ -166,7 +176,11 @@ class albaem():
             print "getEnables: SEND: %s\t RCVD: %s"%(command, answer)
             print "getEnables: %s"%(enables)
         return enables
-    def setEnables(self, enables):
+
+    def getEnablesAll(self):
+        self.getEnables(['1', '2', '3', '4'])
+
+    def _setEnables(self, enables):
         channelchain = ''
         for couple in enables:
             channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
@@ -179,10 +193,23 @@ class albaem():
             print "setEnables: %s"%(e)
         if self.DEBUG:
             print "setEnables: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setEnables(self, enables):
+        self.StopAdc()
+        self._setEnables(enables)
+        self.StartAdc()
+
+    def setEnablesAll(self, enable):
+        self.StopAdc()
+        self.setEnables([['1', enable], ['2', enable], ['3', enable], ['4', enable]])
+        self.StartAdc()
+
     def disableAll(self):
         self.setEnables([['1', 'NO'],['2', 'NO'],['3', 'NO'],['4', 'NO']])
+
     def enableChannel(self, channel):
         self.setEnables([['%s'%channel, 'YES']])
+
     def getInvs(self, channels):
         channelchain = ''
         for channel in channels:
@@ -198,7 +225,11 @@ class albaem():
             print "getInvs: SEND: %s\t RCVD: %s"%(command, answer)
             print "getInvs: %s"%(invs)
         return invs
-    def setInvs(self, invs):
+
+    def getInvsAll(self):
+        self.getInvs(['1', '2', '3', '4'])
+
+    def _setInvs(self, invs):
         channelchain = ''
         for couple in invs:
             channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
@@ -211,6 +242,17 @@ class albaem():
             print "setInvs: %s"%(e)
         if self.DEBUG:
             print "setInvs: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setInvs(self, invs):
+        self.StopAdc()
+        self._setInvs(invs)
+        self.StartAdc()
+
+    def setInvsAll(self, inv):
+        self.StopAdc()
+        self.setInvs([['1', inv], ['2', inv], ['3', inv], ['4', inv]])
+        self.StartAdc()
+
     def getFilters(self, channels):
         channelchain = ''
         for channel in channels:
@@ -226,7 +268,11 @@ class albaem():
             print "getFilters: SEND: %s\t RCVD: %s"%(command, answer)
             print "getFilters: %s"%(filters)
         return filters
-    def setFilters(self, filters):
+
+    def getFiltersAll(self):
+        self.getFilters(['1', '2', '3', '4'])
+
+    def _setFilters(self, filters):
         channelchain = ''
         for couple in filters:
             channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
@@ -246,6 +292,17 @@ class albaem():
             print "setFilters: %s"%(e)
         if self.DEBUG:
             print "setFilters: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setFilters(self, filters):
+        self.StopAdc()
+        self._setFilters(filters)
+        self.StartAdc()
+
+    def setFiltersAll(self, filter):
+        self.StopAdc()
+        self.setFilters([['1', filter], ['2', filter], ['3', filter], ['4', filter]])
+        self.StartAdc()
+
     def getOffsets(self, channels):
         channelchain = ''
         for channel in channels:
@@ -261,7 +318,11 @@ class albaem():
             print "getOffsets: SEND: %s\t RCVD: %s"%(command, answer)
             print "getOffsets: %s"%(offsets)
         return offsets
-    def setOffsets(self, offsets):
+
+    def getOffsetsAll(self):
+        self.getOffsets(['1', '2', '3', '4'])
+
+    def _setOffsets(self, offsets):
         channelchain = ''
         for couple in offsets:
             channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
@@ -274,6 +335,59 @@ class albaem():
             print "setOffsets: %s"%(e)
         if self.DEBUG:
             print "setOffsets: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setOffsets(self, offsets):
+        self.StopAdc()
+        self._setOffsets(offsets)
+        self.StartAdc()
+
+    def setOffsetsAll(self, offset):
+        self.StopAdc()
+        self.setOffsets([['1', offset], ['2', offset], ['3', offset], ['4', offset]])
+        self.StartAdc()
+
+    def getAmpmodes(self, channels):
+        channelchain = ''
+        for channel in channels:
+            channelchain ='%s %s '%(channelchain, channel)
+        try:
+            command = '?AMPMODE %s'%channelchain
+            answer = self.ask(command)
+            ampmodes = self.extractMultichannel(answer, 1)
+        except Exception, e:
+            print "getAmpmodes: %s"%(e)
+            return None
+        if self.DEBUG:
+            print "getAmpmodes: SEND: %s\t RCVD: %s"%(command, answer)
+            print "getAmpmodes: %s"%(ampmodes)
+        return ampmodes
+
+    def getAmpmodesAll(self):
+        self.getAmpmodes(['1', '2', '3', '4'])
+
+    def _setAmpmodes(self, ampmodes):
+        channelchain = ''
+        for couple in ampmodes:
+            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
+        try: 
+            command = 'AMPMODE %s'%(channelchain)
+            answer = self.ask(command)
+            if answer != 'AMPMODE ACK\x00':
+                raise Exception('setAmpmodes: Wrong acknowledge')
+        except Exception, e:
+            print "setAmpmodes: %s"%(e)
+        if self.DEBUG:
+            print "setAmpmodes: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setAmpmodes(self, ampmodes):
+        self.StopAdc()
+        self._setAmpmodes(ampmodes)
+        self.StartAdc()
+
+    def setAmpmodesAll(self, ampmode):
+        self.StopAdc()
+        self.setAmpmodes([['1', ampmode], ['2', ampmode], ['3', ampmode], ['4', ampmode]])
+
     def getMeasures(self, channels):
         channelchain = ''
         for channel in channels:
@@ -308,6 +422,9 @@ class albaem():
             print "getMeasure: %s"%(measure[int(channel[0])-1][1])
         return measure[int(channel[0])-1][1]
 
+    def getMeasuresAll(self):
+        self.getMeasures(['1', '2', '3', '4'])
+
     def getAvsamples(self):
         try:
             command = '?AVSAMPLES'
@@ -320,7 +437,8 @@ class albaem():
             print "getAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
             print "getAvsamples: %s"%(avsamples)
         return avsamples
-    def setAvsamples(self, avsamples):
+
+    def _setAvsamples(self, avsamples):
         try: 
             command = 'AVSAMPLES %s'%(avsamples)
             answer = self.ask(command)
@@ -331,6 +449,12 @@ class albaem():
             print "setAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
         if self.DEBUG:
             print "setAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setAvsamples(self, avsamples):
+        self.StopAdc()
+        self._setAvsamples(avsamples)
+        self.StartAdc()
+
     def getPoints(self):
         try:
             command = '?POINTS'
@@ -343,7 +467,8 @@ class albaem():
             print "getPoints: SEND: %s\t RCVD: %s"%(command, answer)
             print "getPoints: %s"%(points)
         return points
-    def setPoints(self, points):
+
+    def _setPoints(self, points):
         try: 
             command = 'POINTS %s'%(points)
             answer = self.ask(command)
@@ -353,6 +478,12 @@ class albaem():
             print "setPoints: %s"%(e)
         if self.DEBUG:
             print "setPoints: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setPoints(self, points):
+        self.StopAdc()
+        self._setPoints(points)
+        self.StartAdc()
+
     def getTrigperiod(self):
         try:
             command = '?TRIGPERIODE'
@@ -366,7 +497,8 @@ class albaem():
             print "getTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
             print "getTrigperiod: %s"%(trigperiode)
         return trigperiode
-    def setTrigperiod(self, trigperiod):
+
+    def _setTrigperiod(self, trigperiod):
         try: 
             command = 'TRIGPERIODE %s'%(trigperiod)
             answer = self.ask(command)
@@ -376,6 +508,11 @@ class albaem():
             print "setTrigperiod: %s"%(e)
         if self.DEBUG:
             print "setTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setTrigperiod(self, trigperiod):
+        self.StopAdc()
+        self._setTrigperiod(trigperiod)
+        self.StartAdc()
 
     def getSrate(self):
         try:
@@ -390,7 +527,7 @@ class albaem():
             print "getSrate: %s"%(srate)
         return srate
 
-    def setSrate(self, srate):
+    def _setSrate(self, srate):
         try: 
             command = 'SRATE %s'%(srate)
             answer = self.ask(command)
@@ -400,6 +537,12 @@ class albaem():
             print "setSrate: %s"%(e)
         if self.DEBUG:
             print "setSrate: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setSrate(self, srate):
+        self.StopAdc()
+        self._setSrate(srate)
+        self.StartAdc()
+
     def getState(self):
         try:
             command = '?STATE'
@@ -412,6 +555,7 @@ class albaem():
             print "getState: SEND: %s\t RCVD: %s"%(command, answer)
             print "getState: %s"%(state)
         return state
+
     def getStatus(self):
         try:
             command = '?STATUS'
@@ -424,6 +568,7 @@ class albaem():
             print "getStatus: SEND: %s\t RCVD: %s"%(command, answer)
             print "getStatus: %s"%(status)
         return status
+
     def getMode(self):
         try:
             command = '?MODE'
@@ -436,6 +581,7 @@ class albaem():
             print "getMode: SEND: %s\t RCVD: %s"%(command, answer)
             print "getMode: %s"%(mode)
         return mode
+
     def Start(self):
         try: 
             command = 'START'
@@ -457,7 +603,6 @@ class albaem():
             print "StartAdc: %s"%(e)
         if self.DEBUG:
             print "StartAdc: SEND: %s\t RCVD: %s"%(command, answer)
-
 
     def StopAdc(self):
         try: 
@@ -482,6 +627,27 @@ class albaem():
             print "Stop: SEND: %s\t RCVD: %s"%(command, answer)
 
         
+    def tryToConnect(self):
+        try:
+            if self.connected == False:
+                ping = subprocess.Popen(
+                                        ['ping','c','2',self.host],
+                                        stdout = subprocess.PIPE,
+                                        stderr = subprocess.PIPE
+                                        )
+
+                out, err = ping.communicate()
+                if out.find('Destination Host Unreachable') == -1:
+                    self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    self.sock.settimeout(1)
+                    self.connected = True
+                else:
+                    self.connected = False
+
+        except socket.timeout, timeout:
+            self.connected = False
+        except Exception, e:
+            self.connected = False             
 
 
 
@@ -489,28 +655,33 @@ class albaem():
 if __name__ == "__main__":
     # TWO BASIC PARAMETERS, unit address and channel 
     #Substitute ask by ask2 in order to use savechain method for debugging without hw
-    myalbaem = albaem('emprot01.cells.es')
+    myalbaem = albaem('elem01r42-013-bl13.cells.es')
     emu = False
-    if emu:    myalbaem.savechain('?RANGE 1 1mA 2 1mA 3 100pA')
-    print myalbaem.getRanges(['1', '2', '3'])
-    if emu:    myalbaem.savechain('?OFFSET 1 0.1 3 -0.1 4 0.2')
-    print myalbaem.getOffsets(['1', '3', '4'])
-    if emu:    myalbaem.savechain('?INV 1 YES 3 YES 4 YES')
-    print myalbaem.getInvs(['1', '3', '4'])
-    if emu:    myalbaem.savechain('?FILTER 1 1 4 10')
-    print myalbaem.getFilters(['1', '4'])
-    if emu:    myalbaem.savechain('?ENABLE 1 YES 2 YES 3 YES 4 YES')
-    print myalbaem.getEnables(['1', '2', '3','4'])
-    #if emu:    myalbaem.savechain('?TRIGPERIODE 10')
-    #print myalbaem.getTrigperiod()
-    if emu:    myalbaem.savechain('START ACK')
-    print myalbaem.Start()
-    #if emu:    myalbaem.savechain('START ACK\x00')
-    #print myalbaem.Start()
-    #if emu:    myalbaem.savechain('STOP ACK\x00')
-    #print myalbaem.Stop()
-    if emu:    myalbaem.savechain('?AVSAMPLES 1000')
+    myalbaem.DEBUG = True
+    print myalbaem.getRangesAll()
+    print myalbaem.setRangesAll('1mA')
+    print myalbaem.getRangesAll()
+    print myalbaem.setRangesAll('100uA')
+    print myalbaem.getRangesAll()
+    print myalbaem.getFiltersAll()
+    print myalbaem.setFiltersAll('NO')
+    print myalbaem.getFiltersAll()
+    print myalbaem.setFiltersAll('10')
+    print myalbaem.getFiltersAll()
+    print myalbaem.getInvsAll()
+    print myalbaem.setInvsAll('NO')
+    print myalbaem.getInvsAll()
+    print myalbaem.setInvsAll('YES')
+    print myalbaem.getInvsAll()
+    print myalbaem.getOffsetsAll()
+    print myalbaem.getEnablesAll()
+    print myalbaem.getAmpmodesAll()
+    print myalbaem.setAmpmodesAll('HB')
+    print myalbaem.getAmpmodesAll()
+    print myalbaem.setAmpmodesAll('LN')
+    print myalbaem.getAmpmodesAll()
     print myalbaem.getAvsamples()
-    if emu:    myalbaem.savechain('?MEAS 1 1e-10 2 1e-11 3 1e-6 4 1e-3 AEEA')
-    print myalbaem.getMeasures(['1','2', '3', '4'])
+    print myalbaem.getTrigperiod()
+    print myalbaem.getPoints()
+    
     
