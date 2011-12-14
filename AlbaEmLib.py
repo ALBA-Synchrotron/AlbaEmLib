@@ -10,20 +10,10 @@ from scipy.stats import *
 import socket
 import datetime
 
-from threading import Lock, Thread
+from threading import Lock
 
-class ReconnectThread(Thread):
-    def __init__(self, albaEm, sleepTime):
-        Thread.__init__(self)
-        self.albaEm = albaEm 
-        self.sleepTime = sleepTime
 
-    def run(self):
-        while True:
-            if not self.albaEm.connected:
-                self.albaEm.tryToConnect()
-            time.sleep(self.sleepTime)
-
+#tango://localhost:10000/ws/bl01/serial0
 class albaem():
     ''' The configuration of the serial line is: 8bits + 1 stopbit, bdr: 9600, terminator:none'''
     ''' The cable is crossed'''
@@ -31,16 +21,10 @@ class albaem():
     DEBUG = False
 
     def __init__(self, host, port=7):
-        self.connected = True #Todo: This variable is not needed anymore and the ReconnectThread neither.
         self.DEBUG = False
         self.host = host
         self.port = port
         self.lock = Lock()
-        
-#        self.reconnect_thread = ReconnectThread(self, 2)
-#        self.reconnect_thread.setDaemon(True)
-#        self.reconnect_thread.start()
-        
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(0.1)
 
@@ -54,13 +38,11 @@ class albaem():
     def ask(self, cmd, size=8192):
         try:
             self.lock.acquire()
-            if self.connected:
-                self.sock.sendto(cmd, (self.host, self.port))
-                data = self.sock.recv(size)
-            else:
-                raise Exception('Device not found!')
+            self.sock.sendto(cmd, (self.host, self.port))
+            data = self.sock.recv(size)
             if self.DEBUG:
                 print 'AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data)
+
             return data
          
         except socket.timeout, timeout:
@@ -77,9 +59,13 @@ class albaem():
         except socket.error, error:
             print 'Socket Error'
             return 'Socket Error'
+            #self.lock.release()
+            #raise Exception('Socket error', error)
         except Exception, e:
             print 'Unknown Error'
             return 'Unknown Exception'
+            #self.lock.release()
+            #raise Exception('Unknown exception', e)
         finally:
             self.lock.release()
 
@@ -128,7 +114,7 @@ class albaem():
         return ranges
 
     def getRangesAll(self):
-        self.getRanges(['1', '2', '3', '4'])
+        return self.getRanges(['1', '2', '3', '4'])
 
     def _setRanges(self, ranges):
         channelchain = ''
@@ -178,7 +164,7 @@ class albaem():
         return enables
 
     def getEnablesAll(self):
-        self.getEnables(['1', '2', '3', '4'])
+        return self.getEnables(['1', '2', '3', '4'])
 
     def _setEnables(self, enables):
         channelchain = ''
@@ -227,7 +213,7 @@ class albaem():
         return invs
 
     def getInvsAll(self):
-        self.getInvs(['1', '2', '3', '4'])
+        return self.getInvs(['1', '2', '3', '4'])
 
     def _setInvs(self, invs):
         channelchain = ''
@@ -270,7 +256,7 @@ class albaem():
         return filters
 
     def getFiltersAll(self):
-        self.getFilters(['1', '2', '3', '4'])
+        return self.getFilters(['1', '2', '3', '4'])
 
     def _setFilters(self, filters):
         channelchain = ''
@@ -320,7 +306,7 @@ class albaem():
         return offsets
 
     def getOffsetsAll(self):
-        self.getOffsets(['1', '2', '3', '4'])
+        return self.getOffsets(['1', '2', '3', '4'])
 
     def _setOffsets(self, offsets):
         channelchain = ''
@@ -363,7 +349,7 @@ class albaem():
         return ampmodes
 
     def getAmpmodesAll(self):
-        self.getAmpmodes(['1', '2', '3', '4'])
+        return self.getAmpmodes(['1', '2', '3', '4'])
 
     def _setAmpmodes(self, ampmodes):
         channelchain = ''
@@ -423,7 +409,7 @@ class albaem():
         return measure[int(channel[0])-1][1]
 
     def getMeasuresAll(self):
-        self.getMeasures(['1', '2', '3', '4'])
+        return self.getMeasures(['1', '2', '3', '4'])
 
     def getAvsamples(self):
         try:
@@ -582,6 +568,14 @@ class albaem():
             print "getMode: %s"%(mode)
         return mode
 
+    def getInfo(self):
+        print 'Ranges:', self.getRangesAll()
+        print 'Filters:', self.getFiltersAll()
+        print 'Invs:', self.getInvsAll()
+        print 'Offsets:', self.getOffsetsAll()
+        print 'Ampmodes:', self.getAmpmodesAll()
+        print 'Avsamples:', self.getAvsamples()
+
     def Start(self):
         try: 
             command = 'START'
@@ -626,36 +620,136 @@ class albaem():
         if self.DEBUG:
             print "Stop: SEND: %s\t RCVD: %s"%(command, answer)
 
+    def sendSetCmd(self, cmd):
+        self.StopAdc()
+        self.ask(cmd)
+        self.StartAdc()    
+
+    def clearOffsetCorr(self):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        self.StopAdc()
+        for range in ranges:
+            self.ask('OFFSETCORR %s 1 0 2 0 3 0 4 0'%range)
+        self.StartAdc()
+
+    def getOffsetCorrAll(self):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        for range in ranges:
+            print self.ask('?OFFSETCORR %s'%range)
+
+    def getGainCorrAll(self):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        for range in ranges:
+            print self.ask('?GAINCORR %s'%range)
+
+    def resetGainCorr(self, channel):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        for range in ranges:
+            print self.sendSetCmd('GAINCORR %s %s 1'%(range, channel))
+
+    def resetOffsetCorr(self, channel):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        for range in ranges:
+            print self.sendSetCmd('OFFSETCORR %s %s 0'%(range, channel))
+
+    def toggleGainCorrPolarisation(self, channel):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        gaincorrs = []
+        for range in ranges:
+            gaincorr = self.ask('?GAINCORR %s'%range).strip('\n').strip('\00').split(' ')
+            gaincorrs.append(gaincorr)
+        print "Initial gaincorr factors:"
+        for gc in gaincorrs:
+            print gc
+        self.StopAdc()
+        for range in ranges:
+            #print 'GAINCORR %s %s %s'%(range, channel, -1*float(gaincorrs[ranges.index(range)][2+2*int(channel)-1]))
+            self.ask('GAINCORR %s %s %s'%(range, channel, -1*float(gaincorrs[ranges.index(range)][2+2*int(channel)-1])))
+        self.StartAdc()
+        gaincorrs = []
+        for range in ranges:
+            gaincorr = self.ask('?GAINCORR %s'%range).strip('\n').strip('\00').split(' ')
+            gaincorrs.append(gaincorr)
+        print "Final gaincorr factors:"
+        for gc in gaincorrs:
+            print gc
+    
+    def loadConfig(self, loadfile):
+        cmd = []
+        myfile = open(loadfile, 'r')
+        mylogstring = myfile.readlines()
+        for i in range(0,6):
+            mystring = mylogstring[i].strip('\n').split(',')
+            cmd.append("%s 1 %s 2 %s 3 %s 4 %s"%(mystring[0], mystring[1], mystring[2], mystring[3], mystring[4]))
+        for i in range(6,len(mylogstring)):
+            mystring = mylogstring[i].strip('\n').split(',')
+            cmd.append("%s %s 1 %s 2 %s 3 %s 4 %s"%(mystring[0], mystring[1], mystring[2], mystring[3], mystring[4], mystring[5]))
+        print "Loading config to EM:"
+        for c in cmd:
+            print c
+            self.sendSetCmd(c)
+ 
+    def _dumpConfig(self):
+        ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
+        mylogstring = []
+        mystring = self.ask('?RANGE').strip('\x00').split(' ')
+        mylogstring.append("RANGE,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        mystring = self.ask('?FILTER').strip('\x00').split(' ')
+        mylogstring.append("FILTER,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        mystring = self.ask('?INV').strip('\x00').split(' ')
+        mylogstring.append("INV,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        mystring = self.ask('?OFFSET').strip('\x00').split(' ')
+        mylogstring.append("OFFSET,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        mystring = self.ask('?ENABLE').strip('\x00').split(' ')
+        mylogstring.append("ENABLE,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        mystring = self.ask('?AMPMODE').strip('\x00').split(' ')
+        mylogstring.append("AMPMODE,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
+        for range in ranges:
+            mystring = self.ask('?OFFSETCORR %s'%range).strip('\x00').split(' ')
+            mylogstring.append("OFFSETCORR,%s,%s,%s,%s,%s\n"%(range, mystring[3], mystring[5], mystring[7], mystring[9]))
+        for range in ranges:
+            mystring = self.ask('?GAINCORR %s'%range).strip('\x00').split(' ')
+            mylogstring.append("GAINCORR,%s,%s,%s,%s,%s\n"%(range, mystring[3], mystring[5], mystring[7], mystring[9]))
+        return mylogstring
+
+    def dumpConfig(self, dumpfile):
+        mylogstring = self._dumpConfig()
+        myfile = open(dumpfile, 'w') 
+        print "Dumping config to file: %s"%dumpfile
+        for line in mylogstring:
+            print line.strip('\n')
+            myfile.write(line)
+
+    def dumpDefaultConfig(self):
+        self.dumpConfig('./%s.dump'%self.host)
+
+    def loadDefaultConfig(self):
+        self.loadConfig('./%s.dump'%self.host)
+
+    def checkAgainstDumpedConfig(self, dumpfile):
+        mylogstring = self._dumpConfig()
+        myfile = open(dumpfile, 'r')
+        mydumpedstring = myfile.readlines()
+        missmatches = 0
+        print "Comparing config of em %s with dumpfile %s..."%(self.host, dumpfile)
+        for i in range(0, len(mylogstring)):
+            if mylogstring[i] != mydumpedstring[i]:
+                print "Current config and dumped config missmatch:"
+                print "Current: %s"%mylogstring[i].strip('\n')
+                print "Dump file: %s"%mydumpedstring[i].strip('\n')
+                missmatches = missmatches + 1
+        print "Comparison finished. Number of missmatches:%s"%missmatches
+
+    def checkAgainstDefaultDumpedConfig(self):
+        self.checkAgainstDumpedConfig('./%s.dump'%self.host)
+
         
-    def tryToConnect(self):
-        try:
-            if self.connected == False:
-                ping = subprocess.Popen(
-                                        ['ping','c','2',self.host],
-                                        stdout = subprocess.PIPE,
-                                        stderr = subprocess.PIPE
-                                        )
-
-                out, err = ping.communicate()
-                if out.find('Destination Host Unreachable') == -1:
-                    self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    self.sock.settimeout(1)
-                    self.connected = True
-                else:
-                    self.connected = False
-
-        except socket.timeout, timeout:
-            self.connected = False
-        except Exception, e:
-            self.connected = False             
-
-
-
 
 if __name__ == "__main__":
     # TWO BASIC PARAMETERS, unit address and channel 
     #Substitute ask by ask2 in order to use savechain method for debugging without hw
     myalbaem = albaem('elem01r42-013-bl13.cells.es')
+    '''
     emu = False
     myalbaem.DEBUG = True
     print myalbaem.getRangesAll()
@@ -683,5 +777,9 @@ if __name__ == "__main__":
     print myalbaem.getAvsamples()
     print myalbaem.getTrigperiod()
     print myalbaem.getPoints()
-    
-    
+    myalbaem.dumpEM('./em.dump')
+    myalbaem.loadEM('./em.dump')
+    '''
+    myalbaem.dumpDefaultConfig()
+    myalbaem.checkAgainstDefaultDumpedConfig()
+    myalbaem.loadDefaultConfig()
