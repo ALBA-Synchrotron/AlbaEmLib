@@ -9,6 +9,7 @@ import array
 from scipy.stats import *
 import socket
 import datetime
+import numpy as np
 
 from threading import Lock
 
@@ -18,7 +19,7 @@ class albaem():
     ''' The configuration of the serial line is: 8bits + 1 stopbit, bdr: 9600, terminator:none'''
     ''' The cable is crossed'''
     myalbaemds = None
-    DEBUG = False
+    DEBUG = False 
 
     def __init__(self, host, port=7):
         self.DEBUG = False
@@ -74,6 +75,10 @@ class albaem():
         if answersplit[0] == '?MEAS':
             status = answersplit[len(answersplit) - 1]
             parameters = answersplit[initialpos:len(answersplit)-1]
+        elif answersplit[0] == '?LDATA' or answersplit[0].startswith('?DATA'):
+            status = answersplit[len(answersplit) - 1]
+            parameters = answersplit[initialpos:len(answersplit)-1]
+            lastpos = answersplit[1]
         else:
             parameters = answersplit[initialpos:len(answersplit)]
         couples = []
@@ -88,6 +93,8 @@ class albaem():
             print "extractMultichannel:%s"%(couples)
         if answersplit[0] == '?MEAS':
             return couples, status
+        elif answersplit[0] == '?LDATA' or answersplit[0].startswith('?DATA'):
+            return couples, status, lastpos
         else: 
             return couples
 
@@ -374,6 +381,75 @@ class albaem():
         self.StopAdc()
         self.setAmpmodes([['1', ampmode], ['2', ampmode], ['3', ampmode], ['4', ampmode]])
 
+    def getLdata(self):
+        channelchain = ''
+        try:
+            command = '?LDATA'
+            answer = self.ask(command)
+            #print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
+            if not answer.startswith('?BUFFER ERROR'):
+                measures, status, lastpos = self.extractMultichannel(answer, 2)
+                lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
+            else:
+                lastpos = 0
+                measures = []
+                status = ''
+            #print "getLdata: %s, %s"%(measures, status)
+        except Exception, e:
+            print "getLdata: %s"%(e)
+            return None
+        if self.DEBUG:
+            print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
+            print "getLdata: %s, %s %s"%(measures, status, lastpos)
+        return measures, status, lastpos
+
+    def getData(self, position):
+        channelchain = ''
+        try:
+            command = '?DATA %s'%position
+            answer = self.ask(command)
+            #print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
+            if not answer.startswith('?BUFFER ERROR'):
+                measures, status, lastpos = self.extractMultichannel(answer, 2)
+                lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
+            else:
+                lastpos = 0
+                measures = ''
+                status = ''
+            #print "getLdata: %s, %s"%(measures, status)
+        except Exception, e:
+            print "getLdata: %s"%(e)
+            return None
+        if self.DEBUG:
+            print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
+            print "getLdata: %s, %s"%(measures, status, lastpos)
+        return measures, status, lastpos
+        
+    
+    def getLastpos(self):
+        measures, status, lastpos = self.getLdata()
+        return lastpos
+
+    def getBuffer(self):
+        lastpos = self.getLastpos()
+        thebuffer = []
+        for i in range(0, lastpos):
+            measures, status, lastpos = self.getLdata()
+            #print measures, status, lastpos
+            thebuffer.append([float(measures[0][1]), float(measures[1][1]), float(measures[2][1]), float(measures[3][1])])
+        #print thebuffer
+        return thebuffer
+    
+    def getBufferChannel(self, chan):
+        if chan in range(1, 5):
+          abuffer = self.getBuffer()
+          channelbuffer = []
+          for i in range(0, len(abuffer)):
+              channelbuffer.append(abuffer[i][chan-1])
+          return channelbuffer
+        else:
+          raise Exception('getBufferChannel: Wrong channel (1-4)')
+
     def getMeasures(self, channels):
         channelchain = ''
         for channel in channels:
@@ -498,6 +574,36 @@ class albaem():
     def setTrigperiod(self, trigperiod):
         self.StopAdc()
         self._setTrigperiod(trigperiod)
+        self.StartAdc()
+
+    def getTrigmode(self):
+        try:
+            command = '?TRIGMODE'
+            if self.DEBUG: print 'getTrigmode: Sending command...'
+            answer = self.ask(command)
+            trigmode = self.extractSimple(answer)
+        except Exception, e:
+            print "getTrigmode: %s"%(e)
+            return None
+        if self.DEBUG:
+            print "getTrigmode: SEND: %s\t RCVD: %s"%(command, answer)
+            print "getTrigmode: %s"%(trigmode)
+        return trigmode
+
+    def _setTrigmode(self, trigmode):
+        try: 
+            command = 'TRIGMODE %s'%(trigmode)
+            answer = self.ask(command)
+            if answer != 'TRIGMODE ACK\x00':
+                raise Exception('setTrigmode: Wrong acknowledge')
+        except Exception, e:
+            print "setTrigmode: %s"%(e)
+        if self.DEBUG:
+            print "setTrigmode: SEND: %s\t RCVD: %s"%(command, answer)
+
+    def setTrigmode(self, trigmode):
+        self.StopAdc()
+        self._setTrigmode(trigmode)
         self.StartAdc()
 
     def getSrate(self):
