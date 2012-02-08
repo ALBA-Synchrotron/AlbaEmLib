@@ -9,19 +9,58 @@ import array
 from scipy.stats import *
 import socket
 import datetime
-import numpy as np
 
 from threading import Lock
 
+
+class AlbaEmLogger():
+    """ Class for log the errors in a file 
+    """
+    
+    def __init__(self, filename, record=True):
+        self._fileName = filename
+        self._record = record
+        
+        stringToLog = '\n\n+-----------------' + str(datetime.datetime.now()) +'----------------------+ \n' \
+                      '+--------------------------+---------------------+----------------+ \n' \
+                      '|         Date time        |      Error Root     |   Error Type   | \n' \
+                      '+--------------------------+---------------------+----------------+ \n'
+        self.logString(stringToLog)
+        
+    def getFileName(self):
+        return self._fileName
+    
+    def setFileName(self, filename):
+        self._fileName = filename
+        
+    def getRecordState(self):
+        return self._record
+    
+    def setRecordState(self, state):
+        self._record = state
+    
+    def logString(self, stringToLog):
+        if self._record:
+            fd = open(self._fileName, 'a')
+            fd.write(stringToLog)
+            fd.close()
+        
+    def log(self, date, error, type):
+        if self._record:
+            stringToLog = str(date) + ' | ' + str(error) + ' | ' + str(type) + '\n'
+            fd = open(self._fileName, 'a')
+            fd.write(stringToLog)
+            fd.close()
 
 #tango://localhost:10000/ws/bl01/serial0
 class albaem():
     ''' The configuration of the serial line is: 8bits + 1 stopbit, bdr: 9600, terminator:none'''
     ''' The cable is crossed'''
     myalbaemds = None
-    DEBUG = False 
+    DEBUG = False
 
-    def __init__(self, host, port=7):
+    def __init__(self, host, port=7, record=True):
+        self.logger = AlbaEmLogger('ErrorsLog.log',record)
         self.DEBUG = False
         self.host = host
         self.port = port
@@ -38,33 +77,54 @@ class albaem():
 
     def ask(self, cmd, size=8192):
         try:
+            #stringToSave = ''
             self.lock.acquire()
+            #stringToSave = str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
             self.sock.sendto(cmd, (self.host, self.port))
+            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->    Command sended\n'
             data = self.sock.recv(size)
+            #@warning: this is a fast test for Julio, better to remove it when the bug will be solved
+            self.Command = cmd + ': ' + str(data) + '\n'
+            if data.startswith('?ERROR') or data.startswith('ERROR'):
+                self.logger.logString(str(cmd) + '-->' + str(datetime.datetime.now())+str(data))
             if self.DEBUG:
                 print 'AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data)
 
             return data
          
         except socket.timeout, timeout:
+            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Timeout Error\n'
+            self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
             try:
                 if self.connected:
+                    #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
                     self.sock.sendto(cmd, (self.host, self.port))
+                    #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->    Command sended\n'
                     data = self.sock.recv(size)
+                    self.Command = cmd + ': ' + str(data) + '\n'
+                    if data.startswith('?ERROR') or data.startswith('ERROR'):
+                        self.logger.logString(str(cmd) + '-->' + str(datetime.datetime.now())+str(data))
                 else:
+                    self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
                     raise Exception('Device not found!')
                 return data
             except Exception, e:
+                self.logger.log(datetime.datetime.now(), '        ask        ', 'Unknown')
                 print 'Timeout Error'
                 return 'Socket timeout'
+            
         except socket.error, error:
             print 'Socket Error'
             return 'Socket Error'
+            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Socket Error\n'
+            self.logger.log(datetime.datetime.now(), '        ask        ', 'Socket')
             #self.lock.release()
             #raise Exception('Socket error', error)
         except Exception, e:
             print 'Unknown Error'
             return 'Unknown Exception'
+            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Unknown Error\n'
+            self.logger.log(datetime.datetime.now(), '        ask        ', 'Unknown')
             #self.lock.release()
             #raise Exception('Unknown exception', e)
         finally:
@@ -75,19 +135,24 @@ class albaem():
         if answersplit[0] == '?MEAS':
             status = answersplit[len(answersplit) - 1]
             parameters = answersplit[initialpos:len(answersplit)-1]
-        elif answersplit[0] == '?LDATA' or answersplit[0].startswith('?DATA'):
-            status = answersplit[len(answersplit) - 1]
-            parameters = answersplit[initialpos:len(answersplit)-1]
-            lastpos = answersplit[1]
+            print parameters
         else:
             parameters = answersplit[initialpos:len(answersplit)]
+            print parameters
         couples = []
         if len(parameters)%2 != 0:
+            #stringToSave = str(datetime.datetime.now()) + ' Error in extractMultichannel: Wrong number of parameters ' + str(parameters) + '\n'
+            self.logger.log(datetime.datetime.now(), 'extractMultichannel', str(parameters))
+            self.logger.logString(self.Command)
             raise Exception('extractMultichannel: Wrong number of parameters')
         for i in range(0, len(parameters)/2):
             if parameters[i*2] in ['1', '2', '3', '4']:
                 couples.append([parameters[i*2], parameters[i*2 + 1]])
             else: 
+                #stringToSave = str(datetime.datetime.now()) + ' Error in extractMultichannel: Wrong channel ' + str(parameters + '\n')
+                #self.logger.log(stringToSave)
+                self.logger.log(datetime.datetime.now(), 'extractMultichannel', str(parameters))
+                self.logger.logString(self.Command)
                 raise Exception('extractMultichannel: Wrong channel')
         if self.DEBUG:
             print "extractMultichannel:%s"%(couples)
@@ -434,7 +499,7 @@ class albaem():
         lastpos = self.getLastpos()
         thebuffer = []
         for i in range(0, lastpos):
-            measures, status, lastpos = self.getLdata()
+            measures, status, lastpos = self.getData(i) #getLdata() bug included by Mr. JLidon
             #print measures, status, lastpos
             thebuffer.append([float(measures[0][1]), float(measures[1][1]), float(measures[2][1]), float(measures[3][1])])
         #print thebuffer
