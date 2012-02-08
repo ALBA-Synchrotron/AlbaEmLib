@@ -59,8 +59,8 @@ class albaem():
     myalbaemds = None
     DEBUG = False
 
-    def __init__(self, host, port=7, record=True):
-        self.logger = AlbaEmLogger('ErrorsLog.log',record)
+    def __init__(self, host, logFileName='AlbaEmLog.log', port=7, record=True):
+        self.logger = AlbaEmLogger(logFileName,record)
         self.DEBUG = False
         self.host = host
         self.port = port
