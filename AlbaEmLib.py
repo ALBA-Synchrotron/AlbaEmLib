@@ -1,58 +1,54 @@
 
-
-import sys
-#import pyIcePAP
 import time
-import PyTango
-#from pylab import *
 import array
 from scipy.stats import *
 import socket
 import datetime
+import logging
+import logging.handlers
 
 from threading import Lock
 
 
-class AlbaEmLogger():
-    """ Class for log the errors in a file 
-    """
-    
-    def __init__(self, filename, record=True):
-        self._fileName = filename
-        self._record = record
-        
-        stringToLog = '\n\n+-----------------' + str(datetime.datetime.now()) +'----------------------+ \n' \
-                      '+--------------------------+---------------------+----------------+ \n' \
-                      '|         Date time        |      Error Root     |   Error Type   | \n' \
-                      '+--------------------------+---------------------+----------------+ \n'
-        self.logString(stringToLog)
-        
-    def getFileName(self):
-        return self._fileName
-    
-    def setFileName(self, filename):
-        self._fileName = filename
-        
-    def getRecordState(self):
-        return self._record
-    
-    def setRecordState(self, state):
-        self._record = state
-    
-    def logString(self, stringToLog):
-        if self._record:
-            fd = open(self._fileName, 'a')
-            fd.write(stringToLog)
-            fd.close()
-        
-    def log(self, date, error, type):
-        if self._record:
-            stringToLog = str(date) + ' | ' + str(error) + ' | ' + str(type) + '\n'
-            fd = open(self._fileName, 'a')
-            fd.write(stringToLog)
-            fd.close()
+#class AlbaEmLogger():
+#    """ Class for log the errors in a file 
+#    """
+#    
+#    def __init__(self, filename, record=True):
+#        self._fileName = filename
+#        self._record = record
+#        
+#        stringToLog = '\n\n+-----------------' + str(datetime.datetime.now()) +'----------------------+ \n' \
+#                      '+--------------------------+---------------------+----------------+ \n' \
+#                      '|         Date time        |      Error Root     |   Error Type   | \n' \
+#                      '+--------------------------+---------------------+----------------+ \n'
+#        self.logString(stringToLog)
+#        
+#    def getFileName(self):
+#        return self._fileName
+#    
+#    def setFileName(self, filename):
+#        self._fileName = filename
+#        
+#    def getRecordState(self):
+#        return self._record
+#    
+#    def setRecordState(self, state):
+#        self._record = state
+#    
+#    def logString(self, stringToLog):
+#        if self._record:
+#            fd = open(self._fileName, 'a')
+#            fd.write(stringToLog)
+#            fd.close()
+#        
+#    def log(self, date, error, type):
+#        if self._record:
+#            stringToLog = str(date) + ' | ' + str(error) + ' | ' + str(type) + '\n'
+#            fd = open(self._fileName, 'a')
+#            fd.write(stringToLog)
+#            fd.close()
 
-#tango://localhost:10000/ws/bl01/serial0
 class albaem():
     ''' The configuration of the serial line is: 8bits + 1 stopbit, bdr: 9600, terminator:none'''
     ''' The cable is crossed'''
@@ -60,7 +56,13 @@ class albaem():
     DEBUG = False
 
     def __init__(self, host, logFileName='AlbaEmLog.log', port=7, record=True):
-        self.logger = AlbaEmLogger(logFileName,record)
+        #self.logger = AlbaEmLogger(logFileName,record)
+        #DftLogFormat = '%(threadName)-14s %(levelname)-8s %(asctime)s %(name)s: %(message)s'
+        #logging.basicConfig(filename=logFileName,format=DftLogFormat,level=logging.DEBUG)
+        
+        self.logger = logging.Logger("albaEM")
+        self.logger.setLevel(logging.INFO)
+        
         self.DEBUG = False
         self.host = host
         self.port = port
@@ -72,7 +74,7 @@ class albaem():
         self.savedchain = savedchain+'\x00'
 
     def ask2(self, cmd, size=8192):
-        print "ask: %s"%self.savedchain
+        #print "ask: %s"%self.savedchain
         return self.savedchain
 
     def ask(self, cmd, size=8192):
@@ -85,81 +87,61 @@ class albaem():
             data = self.sock.recv(size)
             #@warning: this is a fast test for Julio, better to remove it when the bug will be solved
             self.Command = cmd + ': ' + str(data) + '\n'
+            self.logger.debug("Testing")
             if data.startswith('?ERROR') or data.startswith('ERROR'):
-                self.logger.logString(str(cmd) + '-->' + str(datetime.datetime.now())+str(data))
-            if self.DEBUG:
-                print 'AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data)
+                self.logger.debug('Command: %s Data: %s' ,cmd,data)
 
+            self.logger.debug('AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data))
             return data
          
         except socket.timeout, timeout:
             #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Timeout Error\n'
-            self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
+            #self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
+            self.logger.error('Timeout Error in function ask')
             try:
-                if self.connected:
-                    #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
-                    self.sock.sendto(cmd, (self.host, self.port))
-                    #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->    Command sended\n'
-                    data = self.sock.recv(size)
-                    self.Command = cmd + ': ' + str(data) + '\n'
-                    if data.startswith('?ERROR') or data.startswith('ERROR'):
-                        self.logger.logString(str(cmd) + '-->' + str(datetime.datetime.now())+str(data))
-                else:
-                    self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
-                    raise Exception('Device not found!')
+                self.sock.sendto(cmd, (self.host, self.port))
+                data = self.sock.recv(size)
+                self.Command = cmd + ': ' + str(data) + '\n'
+                if data.startswith('?ERROR') or data.startswith('ERROR'):
+                    self.logger.error(self.Command)
                 return data
             except Exception, e:
-                self.logger.log(datetime.datetime.now(), '        ask        ', 'Unknown')
-                print 'Timeout Error'
-                return 'Socket timeout'
+                self.logger.error('Unknown error in function ask. %s', e)
+                raise
             
         except socket.error, error:
-            print 'Socket Error'
-            return 'Socket Error'
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Socket Error\n'
-            self.logger.log(datetime.datetime.now(), '        ask        ', 'Socket')
-            #self.lock.release()
-            #raise Exception('Socket error', error)
+            self.logger.error('Socket Error in function ask. %s',error)
+            raise
         except Exception, e:
-            print 'Unknown Error'
-            return 'Unknown Exception'
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Unknown Error\n'
-            self.logger.log(datetime.datetime.now(), '        ask        ', 'Unknown')
-            #self.lock.release()
-            #raise Exception('Unknown exception', e)
+            self.logger.error('Unknown error in function ask. %s', e)
+            raise
+
         finally:
             self.lock.release()
 
     def extractMultichannel(self, chain, initialpos):
         answersplit = chain.strip('\x00').split(' ')
-        if answersplit[0] == '?MEAS':
+        if answersplit[0] == '?MEAS' or answersplit[0] == '?LDATA':
             status = answersplit[len(answersplit) - 1]
             parameters = answersplit[initialpos:len(answersplit)-1]
-            print parameters
         else:
             parameters = answersplit[initialpos:len(answersplit)]
-            print parameters
         couples = []
         if len(parameters)%2 != 0:
-            #stringToSave = str(datetime.datetime.now()) + ' Error in extractMultichannel: Wrong number of parameters ' + str(parameters) + '\n'
-            self.logger.log(datetime.datetime.now(), 'extractMultichannel', str(parameters))
-            self.logger.logString(self.Command)
+            self.logger.error('Error in extractMultichannel. Parameters: %s', str(parameters))
             raise Exception('extractMultichannel: Wrong number of parameters')
         for i in range(0, len(parameters)/2):
             if parameters[i*2] in ['1', '2', '3', '4']:
                 couples.append([parameters[i*2], parameters[i*2 + 1]])
             else: 
-                #stringToSave = str(datetime.datetime.now()) + ' Error in extractMultichannel: Wrong channel ' + str(parameters + '\n')
-                #self.logger.log(stringToSave)
-                self.logger.log(datetime.datetime.now(), 'extractMultichannel', str(parameters))
-                self.logger.logString(self.Command)
+                self.logger.error('Error @extractMultichannel. Parameters: %s Command: %s', str(parameters), self.Command)
                 raise Exception('extractMultichannel: Wrong channel')
-        if self.DEBUG:
-            print "extractMultichannel:%s"%(couples)
+        self.logger.debug("extractMultichannel:%s"%(couples))
         if answersplit[0] == '?MEAS':
             return couples, status
         elif answersplit[0] == '?LDATA' or answersplit[0].startswith('?DATA'):
-            return couples, status, lastpos
+            lastpos = answersplit[1]
+            return couples, status, lastpos #@warning: WTF! where this lastpos comes from??
         else: 
             return couples
 
@@ -174,15 +156,13 @@ class albaem():
         try:
             command = '?RANGE %s'%channelchain
             answer = self.ask(command)
-            if self.DEBUG:
-                print "getRanges: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.debug("getRanges: SEND: %s\t RCVD: %s"%(command, answer))
             ranges = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getRanges: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getRanges: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getRanges: %s"%(ranges)
+            self.logger.error("getRanges: %s"%(e))
+            raise
+        self.debug("getRanges: SEND: %s\t RCVD: %s"%(command, answer))
+        self.debug("getRanges: %s"%(ranges))
         return ranges
 
     def getRangesAll(self):
@@ -205,9 +185,8 @@ class albaem():
             if answer != 'RANGE ACK\x00':
                 raise Exception('setRanges: Wrong acknowledge')
         except Exception, e:
-            print "setRanges: %s"%(e)
-        if self.DEBUG:
-            print "setRanges: SEND: %s\t RCVD: %s"%(command, answer)
+            raise Exception("setRanges: %s"%(e))
+        self.logger.debug("setRanges: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setRanges(self, ranges):
         self.StopAdc()
@@ -228,11 +207,10 @@ class albaem():
             answer = self.ask(command)
             enables = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getEnables: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getEnables: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getEnables: %s"%(enables)
+            self.logger.error("getEnables: %s"%(e))
+            raise
+        self.logger.debug("getEnables: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getEnables: %s"%(enables))
         return enables
 
     def getEnablesAll(self):
@@ -248,9 +226,8 @@ class albaem():
             if answer != 'ENABLE ACK\x00':
                 raise Exception('setEnables: Wrong acknowledge')
         except Exception, e:
-            print "setEnables: %s"%(e)
-        if self.DEBUG:
-            print "setEnables: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setEnables: %s"%(e))
+        self.logger.debug("setEnables: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setEnables(self, enables):
         self.StopAdc()
@@ -277,11 +254,10 @@ class albaem():
             answer = self.ask(command)
             invs = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getInvs: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getInvs: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getInvs: %s"%(invs)
+            self.logger.error("getInvs: %s"%(e))
+            raise
+        self.logger.debug("getInvs: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getInvs: %s"%(invs))
         return invs
 
     def getInvsAll(self):
@@ -297,9 +273,8 @@ class albaem():
             if answer != 'INV ACK\x00':
                 raise Exception('setInvs: Wrong acknowledge')
         except Exception, e:
-            print "setInvs: %s"%(e)
-        if self.DEBUG:
-            print "setInvs: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setInvs: %s"%(e))
+        self.logger.debug("setInvs: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setInvs(self, invs):
         self.StopAdc()
@@ -320,11 +295,10 @@ class albaem():
             answer = self.ask(command)
             filters = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getFilters: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getFilters: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getFilters: %s"%(filters)
+            self.logger.error("getFilters: %s"%(e))
+            raise
+        self.logger.debug("getFilters: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getFilters: %s"%(filters))
         return filters
 
     def getFiltersAll(self):
@@ -347,9 +321,8 @@ class albaem():
             if answer != 'FILTER ACK\x00':
                 raise Exception('setFilters: Wrong acknowledge')
         except Exception, e:
-            print "setFilters: %s"%(e)
-        if self.DEBUG:
-            print "setFilters: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setFilters: %s"%(e))
+        self.logger.debug("setFilters: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setFilters(self, filters):
         self.StopAdc()
@@ -370,11 +343,10 @@ class albaem():
             answer = self.ask(command)
             offsets = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getOffsets: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getOffsets: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getOffsets: %s"%(offsets)
+            self.logger.error("getOffsets: %s"%(e))
+            raise
+        self.logger.debug("getOffsets: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getOffsets: %s"%(offsets))
         return offsets
 
     def getOffsetsAll(self):
@@ -390,9 +362,8 @@ class albaem():
             if answer != 'OFFSET ACK\x00':
                 raise Exception('setOffsets: Wrong acknowledge')
         except Exception, e:
-            print "setOffsets: %s"%(e)
-        if self.DEBUG:
-            print "setOffsets: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setOffsets: %s"%(e))
+        self.logger.debug("setOffsets: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setOffsets(self, offsets):
         self.StopAdc()
@@ -413,11 +384,10 @@ class albaem():
             answer = self.ask(command)
             ampmodes = self.extractMultichannel(answer, 1)
         except Exception, e:
-            print "getAmpmodes: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getAmpmodes: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getAmpmodes: %s"%(ampmodes)
+            self.logger.error("getAmpmodes: %s"%(e))
+            raise
+        self.logger.debug("getAmpmodes: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAmpmodes: %s"%(ampmodes))
         return ampmodes
 
     def getAmpmodesAll(self):
@@ -433,9 +403,8 @@ class albaem():
             if answer != 'AMPMODE ACK\x00':
                 raise Exception('setAmpmodes: Wrong acknowledge')
         except Exception, e:
-            print "setAmpmodes: %s"%(e)
-        if self.DEBUG:
-            print "setAmpmodes: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setAmpmodes: %s"%(e))
+        self.logger.debug("setAmpmodes: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setAmpmodes(self, ampmodes):
         self.StopAdc()
@@ -447,11 +416,10 @@ class albaem():
         self.setAmpmodes([['1', ampmode], ['2', ampmode], ['3', ampmode], ['4', ampmode]])
 
     def getLdata(self):
-        channelchain = ''
+        
         try:
             command = '?LDATA'
             answer = self.ask(command)
-            #print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
             if not answer.startswith('?BUFFER ERROR'):
                 measures, status, lastpos = self.extractMultichannel(answer, 2)
                 lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
@@ -459,21 +427,17 @@ class albaem():
                 lastpos = 0
                 measures = []
                 status = ''
-            #print "getLdata: %s, %s"%(measures, status)
         except Exception, e:
-            print "getLdata: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getLdata: %s, %s %s"%(measures, status, lastpos)
+            self.logger.error("getLdata: %s"%(e))
+            raise
+        self.logger.debug("getLdata: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getLdata: %s, %s %s"%(measures, status, lastpos))
         return measures, status, lastpos
 
     def getData(self, position):
-        channelchain = ''
         try:
             command = '?DATA %s'%position
             answer = self.ask(command)
-            #print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
             if not answer.startswith('?BUFFER ERROR'):
                 measures, status, lastpos = self.extractMultichannel(answer, 2)
                 lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
@@ -481,13 +445,11 @@ class albaem():
                 lastpos = 0
                 measures = ''
                 status = ''
-            #print "getLdata: %s, %s"%(measures, status)
         except Exception, e:
-            print "getLdata: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getLdata: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getLdata: %s, %s"%(measures, status, lastpos)
+            self.logger.error("getData: %s"%(e))
+            raise
+        self.logger.debug("getLdata: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getLdata: %s, %s"%(measures, status, lastpos))
         return measures, status, lastpos
         
     
@@ -500,20 +462,18 @@ class albaem():
         thebuffer = []
         for i in range(0, lastpos):
             measures, status, lastpos = self.getData(i) #getLdata() bug included by Mr. JLidon
-            #print measures, status, lastpos
             thebuffer.append([float(measures[0][1]), float(measures[1][1]), float(measures[2][1]), float(measures[3][1])])
-        #print thebuffer
         return thebuffer
     
     def getBufferChannel(self, chan):
         if chan in range(1, 5):
-          abuffer = self.getBuffer()
-          channelbuffer = []
-          for i in range(0, len(abuffer)):
-              channelbuffer.append(abuffer[i][chan-1])
-          return channelbuffer
+            abuffer = self.getBuffer()
+            channelbuffer = []
+            for i in range(0, len(abuffer)):
+                channelbuffer.append(abuffer[i][chan-1])
+            return channelbuffer
         else:
-          raise Exception('getBufferChannel: Wrong channel (1-4)')
+            raise Exception('getBufferChannel: Wrong channel (1-4)')
 
     def getMeasures(self, channels):
         channelchain = ''
@@ -522,31 +482,25 @@ class albaem():
         try:
             command = '?MEAS %s'%channelchain
             answer = self.ask(command)
-            #print "getMeasures: SEND: %s\t RCVD: %s"%(command, answer)
             measures, status = self.extractMultichannel(answer, 1)
-            #print "getMeasures: %s, %s"%(measures, status)
         except Exception, e:
-            print "getMeasures: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getMeasures: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getMeasures: %s, %s"%(measures, status)
+            self.logger.error("getMeasures: %s"%(e))
+            raise
+        self.logger.debug("getMeasures: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getMeasures: %s, %s"%(measures, status))
         return measures, status
 
     def getMeasure(self, channel):
         try:
             command = '?MEAS'
             answer = self.ask(command)
-            #print "getMeasure: SEND: %s\t RCVD: %s"%(command, answer)
             measure, status = self.extractMultichannel(answer, 1)
-            #print "getMeasure: %s, %s"%(measure, status)
         except Exception, e:
-            #print "getMeasure: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getMeasure: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getMeasure: %s, %s"%(measure, status)
-            print "getMeasure: %s"%(measure[int(channel[0])-1][1])
+            self.logger.error("getMeasure: %s"%(e))
+            raise
+        self.logger.debug("getMeasure: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getMeasure: %s, %s"%(measure, status))
+        self.logger.debug("getMeasure: %s"%(measure[int(channel[0])-1][1]))
         return measure[int(channel[0])-1][1]
 
     def getMeasuresAll(self):
@@ -558,11 +512,10 @@ class albaem():
             answer = self.ask(command)
             avsamples = self.extractSimple(answer)
         except Exception, e:
-            print "getAvsamples: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getAvsamples: %s"%(avsamples)
+            self.logger.error("getAvsamples: %s"%(e))
+            raise
+        self.logger.debug("getAvsamples: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAvsamples: %s"%(avsamples))
         return avsamples
 
     def _setAvsamples(self, avsamples):
@@ -572,10 +525,9 @@ class albaem():
             if answer != 'AVSAMPLES ACK\x00':
                 raise Exception('setAvsamples: Wrong acknowledge')
         except Exception, e:
-            print "setAvsamples: %s"%(e)
-            print "setAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
-        if self.DEBUG:
-            print "setAvsamples: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setAvsamples: %s"%(e))
+            self.logger.error("setAvsamples: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("setAvsamples: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setAvsamples(self, avsamples):
         self.StopAdc()
@@ -588,11 +540,10 @@ class albaem():
             answer = self.ask(command)
             points = self.extractSimple(answer)
         except Exception, e:
-            print "getPoints: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getPoints: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getPoints: %s"%(points)
+            self.logger.error("getPoints: %s"%(e))
+            raise
+        self.logger.debug("getPoints: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getPoints: %s"%(points))
         return points
 
     def _setPoints(self, points):
@@ -602,9 +553,8 @@ class albaem():
             if answer != 'POINTS ACK\x00':
                 raise Exception('setPoints: Wrong acknowledge')
         except Exception, e:
-            print "setPoints: %s"%(e)
-        if self.DEBUG:
-            print "setPoints: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setPoints: %s"%(e))
+        #self.logger.debug("setPoints: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setPoints(self, points):
         self.StopAdc()
@@ -614,15 +564,14 @@ class albaem():
     def getTrigperiod(self):
         try:
             command = '?TRIGPERIODE'
-            if self.DEBUG: print 'getTrigperiod: Sending command...'
+            self.logger.debug('getTrigperiod: Sending command...')
             answer = self.ask(command)
             trigperiode = self.extractSimple(answer)
         except Exception, e:
-            print "getTrigperiod: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getTrigperiod: %s"%(trigperiode)
+            self.logger.error("getTrigperiod: %s"%(e))
+            raise
+        self.logger.debug("getTrigperiod: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getTrigperiod: %s"%(trigperiode))
         return trigperiode
 
     def _setTrigperiod(self, trigperiod):
@@ -632,9 +581,8 @@ class albaem():
             if answer != 'TRIGPERIODE ACK\x00':
                 raise Exception('setTrigperiod: Wrong acknowledge')
         except Exception, e:
-            print "setTrigperiod: %s"%(e)
-        if self.DEBUG:
-            print "setTrigperiod: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setTrigperiod: %s"%(e))
+        self.logger.debug("setTrigperiod: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setTrigperiod(self, trigperiod):
         self.StopAdc()
@@ -644,15 +592,14 @@ class albaem():
     def getTrigmode(self):
         try:
             command = '?TRIGMODE'
-            if self.DEBUG: print 'getTrigmode: Sending command...'
+            self.logger.debug('getTrigmode: Sending command...')
             answer = self.ask(command)
             trigmode = self.extractSimple(answer)
         except Exception, e:
-            print "getTrigmode: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getTrigmode: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getTrigmode: %s"%(trigmode)
+            self.logger.error("getTrigmode: %s"%(e))
+            raise
+        self.logger.debug("getTrigmode: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getTrigmode: %s"%(trigmode))
         return trigmode
 
     def _setTrigmode(self, trigmode):
@@ -662,9 +609,8 @@ class albaem():
             if answer != 'TRIGMODE ACK\x00':
                 raise Exception('setTrigmode: Wrong acknowledge')
         except Exception, e:
-            print "setTrigmode: %s"%(e)
-        if self.DEBUG:
-            print "setTrigmode: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setTrigmode: %s"%(e))
+        self.logger.debug( "setTrigmode: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setTrigmode(self, trigmode):
         self.StopAdc()
@@ -677,11 +623,10 @@ class albaem():
             answer = self.ask(command)
             srate = self.extractSimple(answer)
         except Exception, e:
-            print "getSrate: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getSrate: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getSrate: %s"%(srate)
+            self.logger.error("getSrate: %s"%(e))
+            raise
+        self.logger.debug("getSrate: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getSrate: %s"%(srate))
         return srate
 
     def _setSrate(self, srate):
@@ -691,9 +636,8 @@ class albaem():
             if answer != 'SRATE ACK\x00':
                 raise Exception('setSrate: Wrong acknowledge')
         except Exception, e:
-            print "setSrate: %s"%(e)
-        if self.DEBUG:
-            print "setSrate: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("setSrate: %s"%(e))
+        self.logger.debug("setSrate: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setSrate(self, srate):
         self.StopAdc()
@@ -706,11 +650,10 @@ class albaem():
             answer = self.ask(command)
             state = self.extractSimple(answer)
         except Exception, e:
-            print "getState: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getState: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getState: %s"%(state)
+            self.logger.error("getState: %s"%(e))
+            raise
+        self.logger.debug("getState: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getState: %s"%(state))
         return state
 
     def getStatus(self):
@@ -719,11 +662,10 @@ class albaem():
             answer = self.ask(command)
             status = self.extractSimple(answer)
         except Exception, e:
-            print "getStatus: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getStatus: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getStatus: %s"%(status)
+            self.logger.error("getStatus: %s"%(e))
+            raise
+        self.logger.debug("getStatus: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getStatus: %s"%(status))
         return status
 
     def getMode(self):
@@ -732,11 +674,10 @@ class albaem():
             answer = self.ask(command)
             mode = self.extractSimple(answer)
         except Exception, e:
-            print "getMode: %s"%(e)
-            return None
-        if self.DEBUG:
-            print "getMode: SEND: %s\t RCVD: %s"%(command, answer)
-            print "getMode: %s"%(mode)
+            self.logger.error("getMode: %s"%(e))
+            raise
+        self.logger.debug("getMode: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getMode: %s"%(mode))
         return mode
 
     def getInfo(self):
@@ -754,9 +695,8 @@ class albaem():
             if answer != 'START ACK\x00':
                 raise Exception('Start: Wrong acknowledge')
         except Exception, e:
-            print "Start: %s"%(e)
-        if self.DEBUG:
-            print "Start: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("Start: %s"%(e))
+        #self.logger.debug("Start: SEND: %s\t RCVD: %s"%(command, answer))
 
     def StartAdc(self):
         try: 
@@ -765,9 +705,8 @@ class albaem():
             if answer != 'STARTADC ACK\x00':
                 raise Exception('StartAdc: Wrong acknowledge')
         except Exception, e:
-            print "StartAdc: %s"%(e)
-        if self.DEBUG:
-            print "StartAdc: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("StartAdc: %s"%(e))
+        #self.logger.debug("StartAdc: SEND: %s\t RCVD: %s"%(command, answer))
 
     def StopAdc(self):
         try: 
@@ -776,9 +715,8 @@ class albaem():
             if answer != 'STOPADC ACK\x00':
                 raise Exception('StopAdc: Wrong acknowledge')
         except Exception, e:
-            print "StopAdc: %s"%(e)
-        if self.DEBUG:
-            print "StopAdc: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("StopAdc: %s"%(e))
+        #self.logger.debug("StopAdc: SEND: %s\t RCVD: %s"%(command, answer))
 
     def Stop(self):
         try: 
@@ -787,9 +725,8 @@ class albaem():
             if answer != 'STOP ACK\x00':
                 raise Exception('Stop: Wrong acknowledge')
         except Exception, e:
-            print "Stop: %s"%(e)
-        if self.DEBUG:
-            print "Stop: SEND: %s\t RCVD: %s"%(command, answer)
+            self.logger.error("Stop: %s"%(e))
+        self.logger.debug("Stop: SEND: %s\t RCVD: %s"%(command, answer))
 
     def sendSetCmd(self, cmd):
         self.StopAdc()
@@ -799,49 +736,48 @@ class albaem():
     def clearOffsetCorr(self):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
         self.StopAdc()
-        for range in ranges:
-            self.ask('OFFSETCORR %s 1 0 2 0 3 0 4 0'%range)
+        for r in ranges:
+            self.ask('OFFSETCORR %s 1 0 2 0 3 0 4 0'%r)
         self.StartAdc()
 
     def getOffsetCorrAll(self):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
-        for range in ranges:
-            print self.ask('?OFFSETCORR %s'%range)
+        for r in ranges:
+            self.logger.debug(self.ask('?OFFSETCORR %s'%r))
 
     def getGainCorrAll(self):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
-        for range in ranges:
-            print self.ask('?GAINCORR %s'%range)
+        for r in ranges:
+            self.logger.debug(self.ask('?GAINCORR %s'%r))
 
     def resetGainCorr(self, channel):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
-        for range in ranges:
-            print self.sendSetCmd('GAINCORR %s %s 1'%(range, channel))
+        for r in ranges:
+            self.logger.debug(self.sendSetCmd('GAINCORR %s %s 1'%(r, channel)))
 
     def resetOffsetCorr(self, channel):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
-        for range in ranges:
-            print self.sendSetCmd('OFFSETCORR %s %s 0'%(range, channel))
+        for r in ranges:
+            self.logger.debug(self.sendSetCmd('OFFSETCORR %s %s 0'%(r, channel)))
 
     def toggleGainCorrPolarisation(self, channel):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
         gaincorrs = []
-        for range in ranges:
-            gaincorr = self.ask('?GAINCORR %s'%range).strip('\n').strip('\00').split(' ')
+        for r in ranges:
+            gaincorr = self.ask('?GAINCORR %s'%r).strip('\n').strip('\00').split(' ')
             gaincorrs.append(gaincorr)
-        print "Initial gaincorr factors:"
+        self.logger.debug("Initial gaincorr factors:")
         for gc in gaincorrs:
             print gc
         self.StopAdc()
-        for range in ranges:
-            #print 'GAINCORR %s %s %s'%(range, channel, -1*float(gaincorrs[ranges.index(range)][2+2*int(channel)-1]))
-            self.ask('GAINCORR %s %s %s'%(range, channel, -1*float(gaincorrs[ranges.index(range)][2+2*int(channel)-1])))
+        for r in ranges:
+            self.ask('GAINCORR %s %s %s'%(r, channel, -1*float(gaincorrs[ranges.index(r)][2+2*int(channel)-1])))
         self.StartAdc()
         gaincorrs = []
-        for range in ranges:
-            gaincorr = self.ask('?GAINCORR %s'%range).strip('\n').strip('\00').split(' ')
+        for r in ranges:
+            gaincorr = self.ask('?GAINCORR %s'%r).strip('\n').strip('\00').split(' ')
             gaincorrs.append(gaincorr)
-        print "Final gaincorr factors:"
+        self.logger.debug("Final gaincorr factors:")
         for gc in gaincorrs:
             print gc
     
@@ -855,9 +791,8 @@ class albaem():
         for i in range(6,len(mylogstring)):
             mystring = mylogstring[i].strip('\n').split(',')
             cmd.append("%s %s 1 %s 2 %s 3 %s 4 %s"%(mystring[0], mystring[1], mystring[2], mystring[3], mystring[4], mystring[5]))
-        print "Loading config to EM:"
+        self.logger.debug("Loading config to EM:")
         for c in cmd:
-            print c
             self.sendSetCmd(c)
  
     def _dumpConfig(self):
@@ -875,20 +810,20 @@ class albaem():
         mylogstring.append("ENABLE,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
         mystring = self.ask('?AMPMODE').strip('\x00').split(' ')
         mylogstring.append("AMPMODE,%s,%s,%s,%s\n"%(mystring[2], mystring[4], mystring[6], mystring[8]))
-        for range in ranges:
-            mystring = self.ask('?OFFSETCORR %s'%range).strip('\x00').split(' ')
-            mylogstring.append("OFFSETCORR,%s,%s,%s,%s,%s\n"%(range, mystring[3], mystring[5], mystring[7], mystring[9]))
-        for range in ranges:
-            mystring = self.ask('?GAINCORR %s'%range).strip('\x00').split(' ')
-            mylogstring.append("GAINCORR,%s,%s,%s,%s,%s\n"%(range, mystring[3], mystring[5], mystring[7], mystring[9]))
+        for r in ranges:
+            mystring = self.ask('?OFFSETCORR %s'%r).strip('\x00').split(' ')
+            mylogstring.append("OFFSETCORR,%s,%s,%s,%s,%s\n"%(r, mystring[3], mystring[5], mystring[7], mystring[9]))
+        for r in ranges:
+            mystring = self.ask('?GAINCORR %s'%r).strip('\x00').split(' ')
+            mylogstring.append("GAINCORR,%s,%s,%s,%s,%s\n"%(r, mystring[3], mystring[5], mystring[7], mystring[9]))
         return mylogstring
 
     def dumpConfig(self, dumpfile):
         mylogstring = self._dumpConfig()
         myfile = open(dumpfile, 'w') 
-        print "Dumping config to file: %s"%dumpfile
+        self.logger.debug("Dumping config to file: %s"%dumpfile)
         for line in mylogstring:
-            print line.strip('\n')
+            self.logger.debug(line.strip('\n'))
             myfile.write(line)
 
     def dumpDefaultConfig(self):
@@ -902,14 +837,14 @@ class albaem():
         myfile = open(dumpfile, 'r')
         mydumpedstring = myfile.readlines()
         missmatches = 0
-        print "Comparing config of em %s with dumpfile %s..."%(self.host, dumpfile)
+        self.logger.debug("Comparing config of em %s with dumpfile %s..."%(self.host, dumpfile))
         for i in range(0, len(mylogstring)):
             if mylogstring[i] != mydumpedstring[i]:
-                print "Current config and dumped config missmatch:"
-                print "Current: %s"%mylogstring[i].strip('\n')
-                print "Dump file: %s"%mydumpedstring[i].strip('\n')
+                self.logger.debug("Current config and dumped config missmatch:")
+                self.logger.debug("Current: %s"%mylogstring[i].strip('\n'))
+                self.logger.debug("Dump file: %s"%mydumpedstring[i].strip('\n'))
                 missmatches = missmatches + 1
-        print "Comparison finished. Number of missmatches:%s"%missmatches
+        self.logger.debug("Comparison finished. Number of missmatches:%s"%missmatches)
 
     def checkAgainstDefaultDumpedConfig(self):
         self.checkAgainstDumpedConfig('./%s.dump'%self.host)
@@ -919,7 +854,15 @@ class albaem():
 if __name__ == "__main__":
     # TWO BASIC PARAMETERS, unit address and channel 
     #Substitute ask by ask2 in order to use savechain method for debugging without hw
+    
+    DftLogFormat = '%(threadName)-14s %(levelname)-8s %(asctime)s %(name)s: %(message)s'
+    #logging.basicConfig(filename='filenameforlogs.log',format=DftLogFormat)
+    format = logging.Formatter(DftLogFormat)
+    handler = logging.handlers.RotatingFileHandler('LibTestingErrors', maxBytes=10240, backupCount=5)
+    handler.setFormatter(format)
     myalbaem = albaem('elem01r42-013-bl13.cells.es')
+    myalbaem.logger.addHandler(handler)
+    
     '''
     emu = False
     myalbaem.DEBUG = True
@@ -950,7 +893,14 @@ if __name__ == "__main__":
     print myalbaem.getPoints()
     myalbaem.dumpEM('./em.dump')
     myalbaem.loadEM('./em.dump')
-    '''
+    
     myalbaem.dumpDefaultConfig()
     myalbaem.checkAgainstDefaultDumpedConfig()
     myalbaem.loadDefaultConfig()
+    '''
+    
+    #myalbaem.getState()
+    myalbaem.setPoints(1)
+    myalbaem.Start()
+    #myalbaem.getState()
+    myalbaem.getLdata()
