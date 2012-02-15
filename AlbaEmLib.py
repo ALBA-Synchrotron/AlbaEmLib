@@ -161,8 +161,8 @@ class albaem():
         except Exception, e:
             self.logger.error("getRanges: %s"%(e))
             raise
-        self.debug("getRanges: SEND: %s\t RCVD: %s"%(command, answer))
-        self.debug("getRanges: %s"%(ranges))
+        self.logger.debug("getRanges: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getRanges: %s"%(ranges))
         return ranges
 
     def getRangesAll(self):
