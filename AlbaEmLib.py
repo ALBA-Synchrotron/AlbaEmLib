@@ -79,15 +79,10 @@ class albaem():
 
     def ask(self, cmd, size=8192):
         try:
-            #stringToSave = ''
             self.lock.acquire()
-            #stringToSave = str(datetime.datetime.now()) + ' -->Sending command' + cmd + '\n'
             self.sock.sendto(cmd, (self.host, self.port))
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' -->    Command sended\n'
             data = self.sock.recv(size)
-            #@warning: this is a fast test for Julio, better to remove it when the bug will be solved
             self.Command = cmd + ': ' + str(data) + '\n'
-            self.logger.debug("Testing")
             if data.startswith('?ERROR') or data.startswith('ERROR'):
                 self.logger.debug('Command: %s Data: %s' ,cmd,data)
 
@@ -95,8 +90,6 @@ class albaem():
             return data
          
         except socket.timeout, timeout:
-            #stringToSave = stringToSave + str(datetime.datetime.now()) + ' Timeout Error\n'
-            #self.logger.log(datetime.datetime.now(), '        ask        ', 'Timeout')
             self.logger.error('Timeout Error in function ask')
             try:
                 self.sock.sendto(cmd, (self.host, self.port))
@@ -121,7 +114,7 @@ class albaem():
 
     def extractMultichannel(self, chain, initialpos):
         answersplit = chain.strip('\x00').split(' ')
-        if answersplit[0] == '?MEAS' or answersplit[0] == '?LDATA':
+        if answersplit[0] == '?MEAS' or answersplit[0] == '?LDATA' or answersplit[0] == '?DATA':
             status = answersplit[len(answersplit) - 1]
             parameters = answersplit[initialpos:len(answersplit)-1]
         else:
@@ -448,8 +441,8 @@ class albaem():
         except Exception, e:
             self.logger.error("getData: %s"%(e))
             raise
-        self.logger.debug("getLdata: SEND: %s\t RCVD: %s"%(command, answer))
-        self.logger.debug("getLdata: %s, %s"%(measures, status, lastpos))
+        self.logger.debug("getData: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getData: %s, %s, %s"%(measures, status, lastpos))
         return measures, status, lastpos
         
     
@@ -857,10 +850,10 @@ if __name__ == "__main__":
     
     DftLogFormat = '%(threadName)-14s %(levelname)-8s %(asctime)s %(name)s: %(message)s'
     #logging.basicConfig(filename='filenameforlogs.log',format=DftLogFormat)
-    format = logging.Formatter(DftLogFormat)
+    myFormat = logging.Formatter(DftLogFormat)
     handler = logging.handlers.RotatingFileHandler('LibTestingErrors', maxBytes=10240, backupCount=5)
-    handler.setFormatter(format)
-    myalbaem = albaem('elem01r42-013-bl13.cells.es')
+    handler.setFormatter(myFormat)
+    myalbaem = albaem('elem01r42s009')
     myalbaem.logger.addHandler(handler)
     
     '''
@@ -899,8 +892,17 @@ if __name__ == "__main__":
     myalbaem.loadDefaultConfig()
     '''
     
-    #myalbaem.getState()
-    myalbaem.setPoints(1)
+    myalbaem.getState()
+    myalbaem.setPoints(2)
     myalbaem.Start()
     #myalbaem.getState()
-    myalbaem.getLdata()
+    import time
+    time.sleep(1)
+    #data = myalbaem.getData(1)
+    data = myalbaem.getBuffer()
+    print data[0]
+    print data[1]
+    chan = myalbaem.getBufferChannel(1)
+    print chan
+    print type(chan[0])
+    #myalbaem.getLdata()
