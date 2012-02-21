@@ -60,7 +60,7 @@ class albaem():
         #DftLogFormat = '%(threadName)-14s %(levelname)-8s %(asctime)s %(name)s: %(message)s'
         #logging.basicConfig(filename=logFileName,format=DftLogFormat,level=logging.DEBUG)
         
-        self.logger = logging.Logger("albaEM")
+        self.logger = logging.Logger("albaEmLIB")
         self.logger.setLevel(logging.INFO)
         
         self.DEBUG = False
@@ -90,23 +90,24 @@ class albaem():
             return data
          
         except socket.timeout, timeout:
-            self.logger.error('Timeout Error in function ask')
+            self.logger.error('Timeout Error in function ask sending the command: %s', cmd)
             try:
                 self.sock.sendto(cmd, (self.host, self.port))
                 data = self.sock.recv(size)
                 self.Command = cmd + ': ' + str(data) + '\n'
                 if data.startswith('?ERROR') or data.startswith('ERROR'):
-                    self.logger.error(self.Command)
+                    self.logger.error('Error sending the command %s again after a timeout', self.Command)
+                    raise Exception('Error sending the command %s again after a timeout'%self.Command)
                 return data
             except Exception, e:
                 self.logger.error('Unknown error in function ask. %s', e)
                 raise
             
         except socket.error, error:
-            self.logger.error('Socket Error in function ask. %s',error)
+            self.logger.error('Socket Error in function ask sending the command: %s. Error: %s' %(self.Command,error))
             raise
         except Exception, e:
-            self.logger.error('Unknown error in function ask. %s', e)
+            self.logger.error('Unknown error in function asksending the command: %s. Error: %s' %(self.Command,e))
             raise
 
         finally:
@@ -121,7 +122,7 @@ class albaem():
             parameters = answersplit[initialpos:len(answersplit)]
         couples = []
         if len(parameters)%2 != 0:
-            self.logger.error('Error in extractMultichannel. Parameters: %s', str(parameters))
+            self.logger.error('Error @extractMultichannel. Parameters: %s Command: %s', str(parameters), self.Command)
             raise Exception('extractMultichannel: Wrong number of parameters')
         for i in range(0, len(parameters)/2):
             if parameters[i*2] in ['1', '2', '3', '4']:
@@ -139,7 +140,11 @@ class albaem():
             return couples
 
     def extractSimple(self, chain):
-        return chain.strip('\x00').split(' ')[1]
+        #self.logger.error(chain)
+        state = chain.strip('\x00').split(' ')[1]
+        if state != 'RUNNING' and state != 'ON' and state != 'IDLE':
+            self.logger.error('Wrong state: %s', state)
+        return state
 
 
     def getRanges(self, channels):
@@ -182,11 +187,17 @@ class albaem():
         self.logger.debug("setRanges: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setRanges(self, ranges):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setRanges(ranges)
         self.StartAdc()
 
     def setRangesAll(self, range):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self.setRanges([['1', range], ['2', range], ['3', range], ['4', range]])
         self.StartAdc()
@@ -223,11 +234,17 @@ class albaem():
         self.logger.debug("setEnables: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setEnables(self, enables):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setEnables(enables)
         self.StartAdc()
 
     def setEnablesAll(self, enable):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()        
         self.StopAdc()
         self.setEnables([['1', enable], ['2', enable], ['3', enable], ['4', enable]])
         self.StartAdc()
@@ -270,11 +287,17 @@ class albaem():
         self.logger.debug("setInvs: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setInvs(self, invs):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setInvs(invs)
         self.StartAdc()
 
     def setInvsAll(self, inv):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self.setInvs([['1', inv], ['2', inv], ['3', inv], ['4', inv]])
         self.StartAdc()
@@ -318,11 +341,17 @@ class albaem():
         self.logger.debug("setFilters: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setFilters(self, filters):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setFilters(filters)
         self.StartAdc()
 
     def setFiltersAll(self, filter):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self.setFilters([['1', filter], ['2', filter], ['3', filter], ['4', filter]])
         self.StartAdc()
@@ -359,11 +388,17 @@ class albaem():
         self.logger.debug("setOffsets: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setOffsets(self, offsets):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setOffsets(offsets)
         self.StartAdc()
 
     def setOffsetsAll(self, offset):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self.setOffsets([['1', offset], ['2', offset], ['3', offset], ['4', offset]])
         self.StartAdc()
@@ -400,12 +435,18 @@ class albaem():
         self.logger.debug("setAmpmodes: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setAmpmodes(self, ampmodes):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setAmpmodes(ampmodes)
         self.StartAdc()
 
     def setAmpmodesAll(self, ampmode):
-        self.StopAdc()
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+#        self.StopAdc()
         self.setAmpmodes([['1', ampmode], ['2', ampmode], ['3', ampmode], ['4', ampmode]])
 
     def getLdata(self):
@@ -417,9 +458,11 @@ class albaem():
                 measures, status, lastpos = self.extractMultichannel(answer, 2)
                 lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
             else:
-                lastpos = 0
-                measures = []
-                status = ''
+                self.logger.debug('BUFFER ERROR!')
+                raise Exception('BUFFER ERROR in getLData!')
+                #lastpos = 0
+                #measures = []
+                #status = ''
         except Exception, e:
             self.logger.error("getLdata: %s"%(e))
             raise
@@ -435,9 +478,11 @@ class albaem():
                 measures, status, lastpos = self.extractMultichannel(answer, 2)
                 lastpos = int(lastpos) + 1 #We use 0 for the case when no data is available
             else:
-                lastpos = 0
-                measures = ''
-                status = ''
+                self.logger.debug('BUFFER ERROR!')
+                raise Exception('BUFFER ERROR in getLData!')
+                #lastpos = 0
+                #measures = ''
+                #status = ''
         except Exception, e:
             self.logger.error("getData: %s"%(e))
             raise
@@ -523,6 +568,9 @@ class albaem():
         self.logger.debug("setAvsamples: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setAvsamples(self, avsamples):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setAvsamples(avsamples)
         self.StartAdc()
@@ -550,6 +598,9 @@ class albaem():
         #self.logger.debug("setPoints: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setPoints(self, points):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setPoints(points)
         self.StartAdc()
@@ -578,6 +629,9 @@ class albaem():
         self.logger.debug("setTrigperiod: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setTrigperiod(self, trigperiod):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setTrigperiod(trigperiod)
         self.StartAdc()
@@ -606,6 +660,9 @@ class albaem():
         self.logger.debug( "setTrigmode: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setTrigmode(self, trigmode):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setTrigmode(trigmode)
         self.StartAdc()
@@ -633,6 +690,9 @@ class albaem():
         self.logger.debug("setSrate: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setSrate(self, srate):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self._setSrate(srate)
         self.StartAdc()
@@ -722,6 +782,9 @@ class albaem():
         self.logger.debug("Stop: SEND: %s\t RCVD: %s"%(command, answer))
 
     def sendSetCmd(self, cmd):
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         self.ask(cmd)
         self.StartAdc()    
@@ -762,6 +825,9 @@ class albaem():
         self.logger.debug("Initial gaincorr factors:")
         for gc in gaincorrs:
             print gc
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
         self.StopAdc()
         for r in ranges:
             self.ask('GAINCORR %s %s %s'%(r, channel, -1*float(gaincorrs[ranges.index(r)][2+2*int(channel)-1])))
