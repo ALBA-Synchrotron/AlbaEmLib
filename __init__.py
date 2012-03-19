@@ -1,4 +1,4 @@
 #!/usr/bin/env python
 
-from AlbaEmLib import albaem
+from albaemlib import AlbaEm
 
