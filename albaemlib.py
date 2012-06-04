@@ -395,6 +395,7 @@ class AlbaEm():
         '''
         try: 
             command = 'FILTER %s'%(channelchain)
+            print "COMMAND: ", command
             answer = self.ask(command)
             if answer != 'FILTER ACK\x00':
                 raise Exception('setFilters: Wrong acknowledge')
@@ -585,11 +586,11 @@ class AlbaEm():
         print(cmd)
         self.setRanges(cmd)
         time.sleep(2)
-        measures = self.ask('?RAWMEAS').strip('\x00').split(' ')
+        measures = self.ask('?VMEAS').strip('\x00').split(' ')
         #self.logger.debug('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
         print('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
         
-        measures2 = [int(float(measures[2])), int(float(measures[4])), int(float(measures[6])), int(float(measures[8]))]
+        measures2 = [float(measures[2]), float(measures[4]), float(measures[6]), float(measures[8])]
         measures3 = []
         for i in range(0, len(measures2)): 
             measures3.append(-measures2[i] + digitaloffsettarget)
@@ -607,7 +608,7 @@ class AlbaEm():
         self.setAvsamples(1000)
         if ranges == 'all':
             ranges = ['100pA', '1nA', '10nA', '100nA', '1uA', '10uA', '100uA', '1mA']
-        digitaloffsettarget = int((1818)*digitaloffsettarget)
+        digitaloffsettarget = (10.0)*digitaloffsettarget
         for rang in ranges:
             self._digitalOffsetCorrect(chans, rang, digitaloffsettarget, correct)
 
