@@ -79,9 +79,15 @@ class AlbaEm():
             @return: Data received from Alba electrometer.
         ''' 
         try:
+            #@todo: use with socket to prevent to use the socket until it finish the readings.
+            #@todo: wait until \x00 has arrived as answer.
+            
             self.lock.acquire()
             self.sock.sendto(cmd, (self.host, self.port))
-            data = self.sock.recv(size)
+            data = ''
+            while not data.endswith('\x00'):
+                answer = self.sock.recv(size)
+                data = data + answer
             self.Command = cmd + ': ' + str(data) + '\n'
             if data.startswith('?ERROR') or data.startswith('ERROR'):
                 self.logger.debug('Command: %s Data: %s' ,cmd,data)
@@ -93,7 +99,10 @@ class AlbaEm():
             self.logger.error('Timeout Error in function ask sending the command: %s', cmd)
             try:
                 self.sock.sendto(cmd, (self.host, self.port))
-                data = self.sock.recv(size)
+                data = ''
+                while not data.endswith('\x00'):
+                    answer = self.sock.recv(size)
+                    data = data + answer
                 self.Command = cmd + ': ' + str(data) + '\n'
                 if data.startswith('?ERROR') or data.startswith('ERROR'):
                     self.logger.error('Error sending the command %s again after a timeout', self.Command)
