@@ -68,18 +68,19 @@ class AlbaEm():
         self.port = port
         self.lock = Lock()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.settimeout(0.1)
+        #@deprecated: it seems not useful nevermore.
+        self.sock.settimeout(0.3)
+        
 
     def ask(self, cmd, size=8192):
         '''
-            Basic function for send commands to the Alba Electrometer.
+            Basic method for send commands to the Alba Electrometer.
             @param cmd: Command for send to electrometer.
             @param size: Default value is 8192. This param is the maximum
                             amount of data to be received at once.
             @return: Data received from Alba electrometer.
         ''' 
         try:
-            #@todo: use with socket to prevent to use the socket until it finish the readings.
             #@todo: wait until \x00 has arrived as answer.
             
             self.lock.acquire()
@@ -89,34 +90,48 @@ class AlbaEm():
                 answer = self.sock.recv(size)
                 data = data + answer
             self.Command = cmd + ': ' + str(data) + '\n'
+            
             if data.startswith('?ERROR') or data.startswith('ERROR'):
                 self.logger.debug('Command: %s Data: %s' ,cmd,data)
-
-            self.logger.debug('AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data))
-            return data
+                
+            elif not data.startswith(cmd.split()[0]):
+                self.logger.debug('Command: %s Data: %s' ,cmd,data)
+                #@todo: should be raise an exception?
+                raise socket.timeout
+            else:
+                self.logger.debug('AlbaEM DEBUG: query:',cmd,'\t','answer length:', len(data), '\t', 'answer:#%s#'%(data))
+                return data
          
         except socket.timeout, timeout:
-            self.logger.error('Timeout Error in function ask sending the command: %s', cmd)
+            self.logger.error('Timeout Error in method ask sending the command: %s', cmd)
             try:
-                self.sock.sendto(cmd, (self.host, self.port))
+                #@deprecated: There is no need to send the command again.
+                #self.sock.sendto(cmd, (self.host, self.port))
+                timesToCheck = 5
                 data = ''
-                while not data.endswith('\x00'):
-                    answer = self.sock.recv(size)
-                    data = data + answer
-                self.Command = cmd + ': ' + str(data) + '\n'
-                if data.startswith('?ERROR') or data.startswith('ERROR'):
-                    self.logger.error('Error sending the command %s again after a timeout', self.Command)
-                    raise Exception('Error sending the command %s again after a timeout'%self.Command)
-                return data
+                while timesToCheck > 0:
+                    timesToCheck -= 1
+                    while not data.endswith('\x00'):
+                        answer = self.sock.recv(size)
+                        data = data + answer
+                    self.Command = cmd + ': ' + str(data) + '\n'
+                    if data.startswith('?ERROR') or data.startswith('ERROR'):
+                        self.logger.error('Error reading the command %s again after a timeout', self.Command)
+                        raise Exception('Error reading the command %s again after a timeout'%self.Command)
+                    elif not data.startswith(cmd.split()[0]):
+                        self.logger.debug('Command: %s Data: %s' ,cmd,data)
+                        raise Exception('Error reading the command %s again after a timeout'%self.Command)
+                    else:
+                        return data
             except Exception, e:
-                self.logger.error('Unknown error in function ask. %s', e)
+                self.logger.error('Unknown error in method ask. %s', e)
                 raise
             
         except socket.error, error:
-            self.logger.error('Socket Error in function ask sending the command: %s. Error: %s' %(self.Command,error))
+            self.logger.error('Socket Error in method ask/sending the command: %s. Error: %s' %(self.Command,error))
             raise
         except Exception, e:
-            self.logger.error('Unknown error in function asksending the command: %s. Error: %s' %(self.Command,e))
+            self.logger.error('Unknown error in method ask/sending the command: %s. Error: %s' %(self.Command,e))
             raise
 
         finally:
@@ -124,8 +139,12 @@ class AlbaEm():
 
     def extractMultichannel(self, chain, initialpos):
         '''
-            This function cleans the answer from alba electrometer and 
+            This method cleans the answer from alba electrometer and 
             returns only the important data. 
+            @param chain: String to extract the useful data.
+            @param initialpos: initial position of the string with useful data.
+            
+            @return: Useful data obtained from the albaem answer.
         '''
         answersplit = chain.strip('\x00').split(' ')
         if answersplit[0] == '?MEAS' or answersplit[0] == '?LDATA' or answersplit[0] == '?DATA':
@@ -154,26 +173,121 @@ class AlbaEm():
 
     def extractSimple(self, chain):
         '''
-            Do the same than extractMultichannel but is used when the answer 
+            Do the same than extractMultichannel but it is used when the answer 
             from electrometer is only one word.
+            @param chain: String to extract the useful data.
+            
+            @return: Useful data obtained from the albaem answer.
         '''
         data = chain.strip('\x00').split(' ')[1]
-#        if state != 'RUNNING' and state != 'ON' and state != 'IDLE': #there are more functions than state that use this
-#            self.logger.error('Wrong state: %s', state)
         return data
 
+    def _getChannelsFromList(self, channels):
+        """
+            Method to receive the channels as a list of integers 
+            and transform it to a string to add to the command to send.
+            @param channels: List of channels to add to the command.
+            
+            @return: string with the channels
+        """
+        channelChain = ''
+        for channel in channels:
+            channelChain ='%s %s '%(channelChain, channel)
+        return channelChain
+    
+    def _prepareChannelsAndValues(self, valuesAndChannelsList):
+        """
+            Method to receive the channels as a list of integers 
+            and transform it to a string to add to the command to send.
+            @param channels: List of channels to add to the command.
+            
+            @return: string with the channels
+        """
+        channelChain = ''
+        for couple in valuesAndChannelsList:
+            channelChain = '%s %s %s'%(channelChain, couple[0], couple[1])
+            
+        return channelChain
 
+    def getAutoRange(self, channels):
+        """
+            Method to get the autoRange for each channel.
+            @param channels: List of channels to obtain the data.
+            
+            @return: list of channels and autoranges
+        """
+        #@todo: Method still not implemented in albaem firmware.
+        pass
+
+    def _setAutoRange(self, autoRanges):
+        """
+        """
+        pass
+    
+    def setAutoRange(self, autoRangeEnables):
+        """
+            Method to set the autoRange for each channel in the list.
+            @param autoRangeEnables: List of channels and values
+        """
+        pass
+    
+    def getAllAutoRanges(self):
+        """
+            Method for getting the autorange of each channel.
+            @return: State of autorange 
+        """
+        try:
+            command = '?AUTORANGE'
+            answer = self.ask(command)
+            autoRange = self.extractSimple(answer)
+        
+        except Exception, e:
+            self.logger.error('getAllAutoRanges: %s' %e)
+            raise
+        self.logger.debug("getAllAutoRanges: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAllAutoRanges: %s"%(autoRange))
+        return autoRange
+
+    def _setAllAutoRanges(self, autoRange):
+        """
+            Private class method to set the autoRange for all channels.
+            @param autoRanges: {ON | OFF}
+        """
+        try:
+            command = 'AUTORANGE %s' %autoRange
+            answer = self.ask(command)
+            
+            if answer != 'AUTORANGE ACK\x00':
+                raise Exception('setAllAutoRanges: Wrong acknowledge')
+        except Exception, e:
+            raise Exception('setAllAutoRanges: %s' %e)
+        self.logger.debug('setAllAutoRanges: SEND: %s\t RCVD: %s' %(command, answer))
+    
+    def setAllAutoRanges(self, autoRange):
+        """
+            Method to set the autoRange for all channels.
+            @param autoRanges: {ON | OFF}
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAllAutoRanges(autoRange)
+        self.StartAdc()
+
+    
     def getRanges(self, channels):
         '''
-            Function for read the range in a channel.
+            Method for read the range in a channel.
             @param channels: List of channels to obtain the range.
-            @return: List of ranges
+            
+            @return: List of ranges.
         '''
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+        
+        channelChain = self._getChannelsFromList(channels)
+        
         try:
-            command = '?RANGE %s'%channelchain
+            command = '?RANGE %s'%channelChain
             answer = self.ask(command)
             self.logger.debug("getRanges: SEND: %s\t RCVD: %s"%(command, answer))
             ranges = self.extractMultichannel(answer, 1)
@@ -186,21 +300,20 @@ class AlbaEm():
 
     def getRangesAll(self):
         '''
-            Function for read all the ranges.
+            Method for read all the ranges.
             @return: List of ranges.
         '''
         return self.getRanges(['1', '2', '3', '4'])
 
     def _setRanges(self, ranges):
         '''
-            Function for set Ranges.
+            Method for set Ranges.
             @param ranges: list of ranges to set.
         '''
-        channelchain = ''
-        for couple in ranges:
-            channelchain = '%s %s %s'%(channelchain, couple[0], couple[1])
+
+        channelChain = self._prepareChannelsAndValues(ranges)
         try: 
-            command = 'RANGE %s'%(channelchain)
+            command = 'RANGE %s'%(channelChain)
             answer = self.ask(command)
             if answer != 'RANGE ACK\x00':
                 raise Exception('setRanges: Wrong acknowledge')
@@ -209,6 +322,10 @@ class AlbaEm():
         self.logger.debug("setRanges: SEND: %s\t RCVD: %s"%(command, answer))
 
     def setRanges(self, ranges):
+        """
+            Method used for setting the ranges of each channel.
+            @param ranges: List of channels and values to set.
+        """
         state = self.getState()
         if state == 'RUNNING':
             self.Stop()
@@ -217,6 +334,10 @@ class AlbaEm():
         self.StartAdc()
 
     def setRangesAll(self, range):
+        """
+            This Method set all the channels with the same values.
+            @param range: Range to apply in all the channels.
+        """
         state = self.getState()
         if state == 'RUNNING':
             self.Stop()
@@ -225,11 +346,16 @@ class AlbaEm():
         self.StartAdc()
 
     def getEnables(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+        """
+            Method to get the enables of each channel.
+            @param channels: List of channels to get the enables.
+            @return: list of enables.
+        """
+        
+        channelChain = self._getChannelsFromList(channels)
+        
         try:
-            command = '?ENABLE %s'%channelchain
+            command = '?ENABLE %s'%channelChain
             answer = self.ask(command)
             enables = self.extractMultichannel(answer, 1)
         except Exception, e:
@@ -240,14 +366,18 @@ class AlbaEm():
         return enables
 
     def getEnablesAll(self):
+        """
+            Method to get the enables of all channels.
+            @return: list of enables.
+        """
         return self.getEnables(['1', '2', '3', '4'])
 
     def _setEnables(self, enables):
-        channelchain = ''
-        for couple in enables:
-            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
+        
+        channelChain = self._prepareChannelsAndValues(enables)    
+        
         try: 
-            command = 'ENABLE %s'%(channelchain)
+            command = 'ENABLE %s'%(channelChain)
             answer = self.ask(command)
             if answer != 'ENABLE ACK\x00':
                 raise Exception('setEnables: Wrong acknowledge')
@@ -278,11 +408,11 @@ class AlbaEm():
         self.setEnables([['%s'%channel, 'YES']])
 
     def getInvs(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+            
+        channelChain = self._getChannelsFromList(channels)
+        
         try:
-            command = '?INV %s'%channelchain
+            command = '?INV %s'%channelChain
             answer = self.ask(command)
             invs = self.extractMultichannel(answer, 1)
         except Exception, e:
@@ -320,11 +450,11 @@ class AlbaEm():
         return self.getInvs(['1', '2', '3', '4'])
 
     def _setInvs(self, invs):
-        channelchain = ''
-        for couple in invs:
-            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
+
+        channelChain = self._prepareChannelsAndValues(invs)
+        
         try: 
-            command = 'INV %s'%(channelchain)
+            command = 'INV %s'%(channelChain)
             answer = self.ask(command)
             if answer != 'INV ACK\x00':
                 raise Exception('setInvs: Wrong acknowledge')
@@ -374,11 +504,11 @@ class AlbaEm():
         self.StartAdc()
 
     def getFilters(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+            
+        channelChain = self._getChannelsFromList(channels)    
+        
         try:
-            command = '?FILTER %s'%channelchain
+            command = '?FILTER %s'%channelChain
             answer = self.ask(command)
             filters = self.extractMultichannel(answer, 1)
         except Exception, e:
@@ -392,18 +522,11 @@ class AlbaEm():
         return self.getFilters(['1', '2', '3', '4'])
 
     def _setFilters(self, filters):
-        channelchain = ''
-        for couple in filters:
-            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
-        '''
-        try:
-            for couple in filters:
-               channelchain = '%s %s'%(couple[0], couple[1])
-               command = 'FILTER %s'%(channelchain)
-               answer = self.ask(command)
-        '''
+            
+        channelChain = self._prepareChannelsAndValues(filters)
+
         try: 
-            command = 'FILTER %s'%(channelchain)
+            command = 'FILTER %s'%(channelChain)
             print "COMMAND: ", command
             answer = self.ask(command)
             if answer != 'FILTER ACK\x00':
@@ -429,11 +552,11 @@ class AlbaEm():
         self.StartAdc()
 
     def getOffsets(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+                    
+        channelChain = self._getChannelsFromList(channels)
+        
         try:
-            command = '?OFFSET %s'%channelchain
+            command = '?OFFSET %s'%channelChain
             answer = self.ask(command)
             offsets = self.extractMultichannel(answer, 1)
         except Exception, e:
@@ -447,11 +570,11 @@ class AlbaEm():
         return self.getOffsets(['1', '2', '3', '4'])
 
     def _setOffsets(self, offsets):
-        channelchain = ''
-        for couple in offsets:
-            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
+            
+        channelChain = self._prepareChannelsAndValues(offsets)
+        
         try: 
-            command = 'OFFSET %s'%(channelchain)
+            command = 'OFFSET %s'%(channelChain)
             answer = self.ask(command)
             if answer != 'OFFSET ACK\x00':
                 raise Exception('setOffsets: Wrong acknowledge')
@@ -476,11 +599,11 @@ class AlbaEm():
         self.StartAdc()
 
     def getAmpmodes(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+
+        channelChain = self._getChannelsFromList(channels)    
+        
         try:
-            command = '?AMPMODE %s'%channelchain
+            command = '?AMPMODE %s'%channelChain
             answer = self.ask(command)
             ampmodes = self.extractMultichannel(answer, 1)
         except Exception, e:
@@ -493,12 +616,15 @@ class AlbaEm():
     def getAmpmodesAll(self):
         return self.getAmpmodes(['1', '2', '3', '4'])
 
-    def _setAmpmodes(self, ampmodes):
-        channelchain = ''
-        for couple in ampmodes:
-            channelchain = '%s %s %s '%(channelchain, couple[0], couple[1])
+    def _setAmpmodes(self, ampModes):
+        channelChain = ''
+        for couple in ampModes:
+            channelChain = '%s %s %s '%(channelChain, couple[0], couple[1])
+            
+        channelChain = self._prepareChannelsAndValues(ampModes)
+        
         try: 
-            command = 'AMPMODE %s'%(channelchain)
+            command = 'AMPMODE %s'%(channelChain)
             answer = self.ask(command)
             if answer != 'AMPMODE ACK\x00':
                 raise Exception('setAmpmodes: Wrong acknowledge')
@@ -638,11 +764,11 @@ class AlbaEm():
         return mydata
         
     def getMeasures(self, channels):
-        channelchain = ''
-        for channel in channels:
-            channelchain ='%s %s '%(channelchain, channel)
+            
+        channelChain = self._getChannelsFromList(channels)
+        
         try:
-            command = '?MEAS %s'%channelchain
+            command = '?MEAS %s'%channelChain
             answer = self.ask(command)
             measures, status = self.extractMultichannel(answer, 1)
         except Exception, e:
