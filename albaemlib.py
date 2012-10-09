@@ -107,7 +107,7 @@ class AlbaEm():
             try:
                 #@deprecated: There is no need to send the command again.
                 #self.sock.sendto(cmd, (self.host, self.port))
-                timesToCheck = 5
+                timesToCheck = 50
                 data = ''
                 while timesToCheck > 0:
                     timesToCheck -= 1
@@ -147,7 +147,7 @@ class AlbaEm():
             @return: Useful data obtained from the albaem answer.
         '''
         answersplit = chain.strip('\x00').split(' ')
-        if answersplit[0] == '?MEAS' or answersplit[0] == '?LDATA' or answersplit[0] == '?DATA':
+        if answersplit[0] == '?MEAS' or answersplit[0] == '?IINST' or answersplit[0] == '?LDATA' or answersplit[0] == '?DATA':
             status = answersplit[len(answersplit) - 1]
             parameters = answersplit[initialpos:len(answersplit)-1]
         else:
@@ -163,7 +163,7 @@ class AlbaEm():
                 self.logger.error('Error @extractMultichannel. Parameters: %s Command: %s', str(parameters), self.Command)
                 raise Exception('extractMultichannel: Wrong channel')
         self.logger.debug("extractMultichannel:%s"%(couples))
-        if answersplit[0] == '?MEAS':
+        if answersplit[0] == '?MEAS' or answersplit[0] == '?IINST':
             return couples, status
         elif answersplit[0] == '?LDATA' or answersplit[0].startswith('?DATA'):
             lastpos = answersplit[1]
@@ -209,6 +209,149 @@ class AlbaEm():
             
         return channelChain
 
+
+    def getAutoRangeMin(self, channels):
+        """
+            Method to get the autoRangeMin for each channel.
+            @param channels: List of channels to obtain the data.
+            
+            @return: list of channels and autoranges
+        """
+        
+        channelChain = self._getChannelsFromList(channels)
+        
+        try:
+            command = '?AUTORANGEMIN %s'%channelChain
+            answer = self.ask(command)
+            self.logger.debug("getAutoRangeMin: SEND: %s\t RCVD: %s"%(command, answer))
+            autoRangeMin = self.extractMultichannel(answer, 1)
+        
+        except Exception, e:
+            self.logger.error('getAutoRangeMin: %s' %e)
+            raise
+        self.logger.debug("getAutoRangeMin: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAutoRangeMin: %s"%(autoRangeMin))
+        return autoRangeMin
+    
+    def getAllAutoRangesMin(self):
+        """
+            Method for getting the autorangeMin of each channel.
+            @return: State of autorangeMin
+        """
+        return self.getAutoRangeMin(['1', '2', '3', '4'])
+
+    def _setAutoRangeMin(self, autoRangesMin):
+        """
+        """
+        channelChain = self._prepareChannelsAndValues(autoRangesMin)
+        
+        try:
+            command = 'AUTORANGEMIN %s' %channelChain
+            answer = self.ask(command)
+            
+            if answer != 'AUTORANGEMIN ACK\x00':
+                raise Exception('setAutoRangesMin: Wrong acknowledge')
+        except Exception, e:
+            raise Exception('setAutoRangesMin: %s' %e)
+        self.logger.debug('setAutoRangesMin: SEND: %s\t RCVD: %s' %(command, answer))
+    
+    def setAutoRangeMin(self, autoRangeMin):
+        """
+            Method to set the autoRangeMin for each channel in the list.
+            @param autoRangeMin: List of channels and values
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAutoRangeMin(autoRangeMin)
+        self.StartAdc()
+    
+    def setAllAutoRangesMin(self, autoRangeMin):
+        """
+            Method to set the autoRangeMin for all channels.
+            @param autoRangesMin in %
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAutoRangeMin([['1', autoRangeMin], ['2', autoRangeMin], ['3', autoRangeMin], ['4', autoRangeMin]])
+        self.StartAdc()
+
+
+    def getAutoRangeMax(self, channels):
+        """
+            Method to get the autoRangeMax for each channel.
+            @param channels: List of channels to obtain the data.
+            
+            @return: list of channels and autoranges
+        """
+        
+        channelChain = self._getChannelsFromList(channels)
+        
+        try:
+            command = '?AUTORANGEMAX %s'%channelChain
+            answer = self.ask(command)
+            self.logger.debug("getAutoRangeMax: SEND: %s\t RCVD: %s"%(command, answer))
+            autoRangeMax = self.extractMultichannel(answer, 1)
+        
+        except Exception, e:
+            self.logger.error('getAutoRangeMax: %s' %e)
+            raise
+        self.logger.debug("getAutoRangeMax: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAutoRangeMax: %s"%(autoRangeMax))
+        return autoRangeMax
+    
+    def getAllAutoRangesMax(self):
+        """
+            Method for getting the autorangeMax of each channel.
+            @return: State of autorangeMax
+        """
+        return self.getAutoRangeMax(['1', '2', '3', '4'])
+
+    def _setAutoRangeMax(self, autoRangesMax):
+        """
+        """
+        channelChain = self._prepareChannelsAndValues(autoRangesMax)
+        
+        try:
+            command = 'AUTORANGEMAX %s' %channelChain
+            answer = self.ask(command)
+            
+            if answer != 'AUTORANGEMAX ACK\x00':
+                raise Exception('setAllAutoRangesMax: Wrong acknowledge')
+        except Exception, e:
+            raise Exception('setAllAutoRangesMax: %s' %e)
+        self.logger.debug('setAllAutoRangesMax: SEND: %s\t RCVD: %s' %(command, answer))
+    
+    def setAutoRangeMax(self, autoRangeMax):
+        """
+            Method to set the autoRangeMax for each channel in the list.
+            @param autoRangeMax: List of channels and values
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAutoRangeMax(autoRangeMax)
+        self.StartAdc()
+    
+    def setAllAutoRangesMax(self, autoRangeMax):
+        """
+            Method to set the autoRangeMax for all channels.
+            @param autoRangesMax in % 
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAutoRangeMax([['1', autoRangeMax], ['2', autoRangeMax], ['3', autoRangeMax], ['4', autoRangeMax]])
+        self.StartAdc()
+
+
+
+
     def getAutoRange(self, channels):
         """
             Method to get the autoRange for each channel.
@@ -216,45 +359,36 @@ class AlbaEm():
             
             @return: list of channels and autoranges
         """
-        #@todo: Method still not implemented in albaem firmware.
-        pass
-
-    def _setAutoRange(self, autoRanges):
-        """
-        """
-        pass
-    
-    def setAutoRange(self, autoRangeEnables):
-        """
-            Method to set the autoRange for each channel in the list.
-            @param autoRangeEnables: List of channels and values
-        """
-        pass
+        
+        channelChain = self._getChannelsFromList(channels)
+        
+        try:
+            command = '?AUTORANGE %s'%channelChain
+            answer = self.ask(command)
+            self.logger.debug("getAutoRange: SEND: %s\t RCVD: %s"%(command, answer))
+            autoRange = self.extractMultichannel(answer, 1)
+        
+        except Exception, e:
+            self.logger.error('getAutoRanges: %s' %e)
+            raise
+        self.logger.debug("getAutoRanges: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getAutoRanges: %s"%(autoRange))
+        return autoRange
     
     def getAllAutoRanges(self):
         """
             Method for getting the autorange of each channel.
             @return: State of autorange 
         """
-        try:
-            command = '?AUTORANGE'
-            answer = self.ask(command)
-            autoRange = self.extractSimple(answer)
-        
-        except Exception, e:
-            self.logger.error('getAllAutoRanges: %s' %e)
-            raise
-        self.logger.debug("getAllAutoRanges: SEND: %s\t RCVD: %s"%(command, answer))
-        self.logger.debug("getAllAutoRanges: %s"%(autoRange))
-        return autoRange
+        return self.getAutoRange(['1', '2', '3', '4'])
 
-    def _setAllAutoRanges(self, autoRange):
+    def _setAutoRange(self, autoRanges):
         """
-            Private class method to set the autoRange for all channels.
-            @param autoRanges: {ON | OFF}
         """
+        channelChain = self._prepareChannelsAndValues(autoRanges)
+        
         try:
-            command = 'AUTORANGE %s' %autoRange
+            command = 'AUTORANGE %s' %channelChain
             answer = self.ask(command)
             
             if answer != 'AUTORANGE ACK\x00':
@@ -263,16 +397,28 @@ class AlbaEm():
             raise Exception('setAllAutoRanges: %s' %e)
         self.logger.debug('setAllAutoRanges: SEND: %s\t RCVD: %s' %(command, answer))
     
-    def setAllAutoRanges(self, autoRange):
+    def setAutoRange(self, autoRange):
         """
-            Method to set the autoRange for all channels.
-            @param autoRanges: {ON | OFF}
+            Method to set the autoRange for each channel in the list.
+            @param autoRangeEnables: List of channels and values
         """
         state = self.getState()
         if state == 'RUNNING':
             self.Stop()
         self.StopAdc()
-        self._setAllAutoRanges(autoRange)
+        self._setAutoRange(autoRange)
+        self.StartAdc()
+    
+    def setAllAutoRanges(self, autoRange):
+        """
+            Method to set the autoRange for all channels.
+            @param autoRanges: {YES | NO}
+        """
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setAutoRange([['1', autoRange], ['2', autoRange], ['3', autoRange], ['4', autoRange]])
         self.StartAdc()
 
     
@@ -303,7 +449,7 @@ class AlbaEm():
             Method for read all the ranges.
             @return: List of ranges.
         '''
-        return self.getRanges(['1', '2', '3', '4'])
+        return self.getAutoRange(['1', '2', '3', '4'])
 
     def _setRanges(self, ranges):
         '''
@@ -763,6 +909,38 @@ class AlbaEm():
         mydata = self.getBufferChannel(chan)
         return mydata
         
+    def getInstantMeasures(self, channels):
+            
+        channelChain = self._getChannelsFromList(channels)
+        
+        try:
+            command = '?IINST %s'%channelChain
+            answer = self.ask(command)
+            measures, status = self.extractMultichannel(answer, 1)
+        except Exception, e:
+            self.logger.error("getInstantMeasures: %s"%(e))
+            raise
+        self.logger.debug("getInstantMeasures: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getInstantMeasures: %s, %s"%(measures, status))
+        return measures, status
+
+    def getInstantMeasure(self, channel):
+        try:
+            command = '?IINST'
+            answer = self.ask(command)
+            measure, status = self.extractMultichannel(answer, 1)
+        except Exception, e:
+            self.logger.error("getInstantMeasure: %s"%(e))
+            raise
+        self.logger.debug("getInstantMeasure: SEND: %s\t RCVD: %s"%(command, answer))
+        #self.logger.debug("getInstantMeasure: %s, %s"%(measure, status))
+        self.logger.debug("getInstantMeasure: %s"%(measure[int(channel[0])-1][1]))
+        return measure[int(channel[0])-1][1]
+        #return measure, status
+
+    def getInstantMeasuresAll(self):
+        return self.getInstantMeasures(['1', '2', '3', '4'])
+        
     def getMeasures(self, channels):
             
         channelChain = self._getChannelsFromList(channels)
@@ -853,6 +1031,40 @@ class AlbaEm():
             self.Stop()
         self.StopAdc()
         self._setPoints(points)
+        self.StartAdc()
+        
+    def getTrigDelay(self):
+        try:
+            command = '?TRIGDELAY'
+            self.logger.debug('getTrigDelay: Sending command...')
+            answer = self.ask(command)
+            trigperiode = self.extractSimple(answer)
+        except Exception, e:
+            self.logger.error("getTrigDelay: %s"%(e))
+            raise
+        self.logger.debug("getTrigDelay: SEND: %s\t RCVD: %s"%(command, answer))
+        self.logger.debug("getTrigDelay: %s"%(trigperiode))
+        return trigperiode
+
+    def _setTrigDelay(self, delay):
+        try: 
+            command = 'TRIGDELAY %s'%(delay)
+            answer = self.ask(command)
+            if answer != 'TRIGDELAY ACK\x00':
+                raise Exception('setTrigDelay: Wrong acknowledge')
+        except Exception, e:
+            self.logger.error("setTrigDelay: %s"%(e))
+        self.logger.debug("setTrigDelay: SEND: %s\t RCVD: %s"%(command, answer))
+
+    def setTrigDelay(self, delay):
+        '''This method changes the delay of each trigger
+           @param delay: delay in ms.
+        '''
+        state = self.getState()
+        if state == 'RUNNING':
+            self.Stop()
+        self.StopAdc()
+        self._setTrigDelay(delay)
         self.StartAdc()
 
     def getTrigperiod(self):
@@ -1199,55 +1411,174 @@ if __name__ == "__main__":
     myalbaem = AlbaEm('elem01r42s009')
     myalbaem.logger.addHandler(handler)
     
-    '''
-    emu = False
-    print myalbaem.getRangesAll()
-    print myalbaem.setRangesAll('1mA')
-    print myalbaem.getRangesAll()
-    print myalbaem.setRangesAll('100uA')
-    print myalbaem.getRangesAll()
-    print myalbaem.getFiltersAll()
-    print myalbaem.setFiltersAll('NO')
-    print myalbaem.getFiltersAll()
-    print myalbaem.setFiltersAll('10')
-    print myalbaem.getFiltersAll()
-    print myalbaem.getInvsAll()
-    print myalbaem.setInvsAll('NO')
-    print myalbaem.getInvsAll()
-    print myalbaem.setInvsAll('YES')
-    print myalbaem.getInvsAll()
-    print myalbaem.getOffsetsAll()
-    print myalbaem.getEnablesAll()
-    print myalbaem.getAmpmodesAll()
-    print myalbaem.setAmpmodesAll('HB')
-    print myalbaem.getAmpmodesAll()
-    print myalbaem.setAmpmodesAll('LN')
-    print myalbaem.getAmpmodesAll()
-    print myalbaem.getAvsamples()
-    print myalbaem.getTrigperiod()
-    print myalbaem.getPoints()
-    myalbaem.dumpEM('./em.dump')
-    myalbaem.loadEM('./em.dump')
     
-    myalbaem.dumpDefaultConfig()
-    myalbaem.checkAgainstDefaultDumpedConfig()
-    myalbaem.loadDefaultConfig()
-    '''
+#    emu = False
+#    print myalbaem.getRangesAll()
+#    print myalbaem.setRangesAll('1mA')
+#    print myalbaem.getRangesAll()
+#    print myalbaem.setRangesAll('100uA')
+#    print myalbaem.getRangesAll()
+#    print myalbaem.getFiltersAll()
+#    print myalbaem.setFiltersAll('NO')
+#    print myalbaem.getFiltersAll()
+#    print myalbaem.setFiltersAll('10')
+#    print myalbaem.getFiltersAll()
+#    print myalbaem.getInvsAll()
+#    print myalbaem.setInvsAll('NO')
+#    print myalbaem.getInvsAll()
+#    print myalbaem.setInvsAll('YES')
+#    print myalbaem.getInvsAll()
+#    print myalbaem.getOffsetsAll()
+#    print myalbaem.getEnablesAll()
+#    print myalbaem.getAmpmodesAll()
+#    print myalbaem.setAmpmodesAll('HB')
+#    print myalbaem.getAmpmodesAll()
+#    print myalbaem.setAmpmodesAll('LN')
+#    print myalbaem.getAmpmodesAll()
+#    print myalbaem.getAvsamples()
+#    print myalbaem.getTrigperiod()
+#    print myalbaem.getPoints()
+#    myalbaem.dumpEM('./em.dump')
+#    myalbaem.loadEM('./em.dump')
+#    
+#    myalbaem.dumpDefaultConfig()
+#    myalbaem.checkAgainstDefaultDumpedConfig()
+#    myalbaem.loadDefaultConfig()
+#    
+#    
+#    myalbaem.getState()
+#    myalbaem.setPoints(2)
+#    myalbaem.Start()
+#    #myalbaem.getState()
+#
+#    import time
+##    time.sleep(1)
+##    #data = myalbaem.getData(1)
+##    data = myalbaem.getBuffer()
+##    print data[0]
+##    print data[1]
+##    chan = myalbaem.getBufferChannel(1)
+##    print chan
+##    print type(chan[0])
+#    #myalbaem.getLdata()
+#    rdata = myalbaem.ask('?RAWDATA 1')
+#    print rdata
+#    print len(rdata)
+#
+#    
+#    print '---- Getting all autoranges ----'
+#    print myalbaem.getAutoRange(['1'])
+#    print myalbaem.getAutoRange(['1','2'])
+#    print myalbaem.getAutoRange(['1','2','3'])
+#    print myalbaem.getAutoRange(['1','2','3','4'])
+#    print myalbaem.getAllAutoRanges()
+#    
+#    print '---- Setting all autoranges ----'
+#    myalbaem.setAllAutoRanges('YES')
+#    print myalbaem.getAllAutoRanges()
+#    
+#    myalbaem.setAutoRange([['1','YES']])
+#    print myalbaem.getAllAutoRanges()
+#    
+#    myalbaem.setAutoRange([['2','YES']])
+#    print myalbaem.getAllAutoRanges()
+#    
+#    myalbaem.setAutoRange([['3','YES']])
+#    print myalbaem.getAllAutoRanges()
+#    
+#    myalbaem.setAutoRange([['4','YES']])
+#    print myalbaem.getAllAutoRanges()
+#    
+#    myalbaem.setAutoRange([['2','NO'],['3','NO']])
+#    print myalbaem.getAllAutoRanges()
+#    myalbaem.setAutoRange([['2','YES'],['3','NO'],['4','NO']])
+#    print myalbaem.getAllAutoRanges()
+#    myalbaem.setAutoRange([['1','NO'],['2','NO'],['3','NO'],['4','NO']])
+#    print myalbaem.getAllAutoRanges()
     
-    myalbaem.getState()
-    myalbaem.setPoints(2)
-    myalbaem.Start()
-    #myalbaem.getState()
-    import time
-#    time.sleep(1)
-#    #data = myalbaem.getData(1)
-#    data = myalbaem.getBuffer()
-#    print data[0]
-#    print data[1]
-#    chan = myalbaem.getBufferChannel(1)
-#    print chan
-#    print type(chan[0])
-    #myalbaem.getLdata()
-    rdata = myalbaem.ask('?RAWDATA 1')
-    print rdata
-    print len(rdata)
+#    print '---- Getting all instant measures ----'
+#    print myalbaem.getMeasures([1,2,3,4])
+#    print myalbaem.getInstantMeasuresAll()
+#    
+#    print '---- Getting instant measures ----'
+#    print myalbaem.getInstantMeasure('1')
+#    print myalbaem.getInstantMeasure('2')
+#    print myalbaem.getInstantMeasure('3')
+#    print myalbaem.getInstantMeasure('4')
+#    print myalbaem.getInstantMeasures([2])
+#    print myalbaem.getInstantMeasures(['1','2'])
+#    print myalbaem.getInstantMeasures([1,2,3])
+#    print myalbaem.getInstantMeasures([1,2,3,4])
+    
+#    print '---- Changing trigger delay ----'
+#    print myalbaem.getTrigDelay()
+#    print myalbaem.setTrigDelay(100)
+#    print myalbaem.getTrigDelay()
+#    print myalbaem.setTrigDelay(0)
+#    print myalbaem.getTrigDelay()
+
+
+#    print '---- Getting all autorangesMin ----'
+#    print myalbaem.getAutoRangeMin(['1'])
+#    print myalbaem.getAutoRangeMin(['1','2'])
+#    print myalbaem.getAutoRangeMin(['1','2','3'])
+#    print myalbaem.getAutoRangeMin(['1','2','3','4'])
+#    print myalbaem.getAllAutoRangesMin()
+#    
+#    print '---- Getting all autorangesMax ----'
+#    print myalbaem.getAutoRangeMax(['1'])
+#    print myalbaem.getAutoRangeMax(['1','2'])
+#    print myalbaem.getAutoRangeMax(['1','2','3'])
+#    print myalbaem.getAutoRangeMax(['1','2','3','4'])
+#    print myalbaem.getAllAutoRangesMax()
+#    
+#    print '---- Setting all autorangesMin ----'
+#    #myalbaem.setAllAutoRangesMin('20')
+#    #print myalbaem.getAllAutoRangesMin()
+#    
+#    myalbaem.setAutoRangeMin([['1','15']])
+#    print myalbaem.getAllAutoRangesMin()
+#    
+#    myalbaem.setAutoRangeMin([['2','15']])
+#    print myalbaem.getAllAutoRangesMin()
+#    
+#    myalbaem.setAutoRangeMin([['3','15']])
+#    print myalbaem.getAllAutoRangesMin()
+#    
+#    myalbaem.setAutoRangeMin([['4','15']])
+#    print myalbaem.getAllAutoRangesMin()
+#    
+##    myalbaem.setAutoRangeMin([['2',10],['3',10]])
+##    print myalbaem.getAllAutoRangesMin()
+##    myalbaem.setAutoRangeMin([['2',5],['3',5],['4',5]])
+##    print myalbaem.getAllAutoRangesMin()
+##    myalbaem.setAutoRangeMin([['1',5],['2',5],['3',5],['4',5]])
+##    print myalbaem.getAllAutoRangesMin()
+#    
+#    print '---- Setting all autorangesMax ----'
+##    myalbaem.setAllAutoRangesMax('80')
+##    print myalbaem.getAllAutoRangesMax()
+#    
+#    myalbaem.setAutoRangeMax([['1',90]])
+#    print myalbaem.getAllAutoRangesMax()
+#    
+#    myalbaem.setAutoRangeMax([['2','85']])
+#    print myalbaem.getAllAutoRangesMax()
+#    
+#    myalbaem.setAutoRangeMax([['3','85']])
+#    print myalbaem.getAllAutoRangesMax()
+#    
+#    myalbaem.setAutoRangeMax([['4','85']])
+#    print myalbaem.getAllAutoRangesMax()
+#    
+#    myalbaem.setAutoRangeMax([['2',95],['3',95]])
+#    print myalbaem.getAllAutoRangesMax()
+#    myalbaem.setAutoRangeMax([['2',95],['3',95],['4',95]])
+#    print myalbaem.getAllAutoRangesMax()
+#    myalbaem.setAutoRangeMax([['1',95],['2',95],['3',95],['4',95]])
+#    print myalbaem.getAllAutoRangesMax()
+    
+    
+
+
+
