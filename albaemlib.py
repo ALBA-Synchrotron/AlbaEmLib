@@ -152,6 +152,9 @@ class AlbaEm():
             parameters = answersplit[initialpos:len(answersplit)-1]
         else:
             parameters = answersplit[initialpos:len(answersplit)]
+            
+        if answersplit[0] == '?AVDATA':
+            return map(float,parameters)
         couples = []
         if len(parameters)%2 != 0:
             self.logger.error('Error @extractMultichannel. Parameters: %s Command: %s', str(parameters), self.Command)
@@ -840,6 +843,21 @@ class AlbaEm():
         measures, status, lastpos = self.getLdata()
         return lastpos
 
+    def getAvData(self, channel):
+        buffer = []
+        try:
+            command = '?AVDATA %s'%channel
+            answer = self.ask(command)
+            if not answer.startswith('?BUFFER ERROR'):
+                buffer = self.extractMultichannel(answer, 1)
+        except Exception, e:
+            self.logger.error("getAvData: %s"%(e))
+            raise
+        self.logger.debug('getAvData: SEND:%s\t RCVD: %s'%(command, answer))
+        self.logger.debug('getAvData: %s'%buffer)
+        return buffer
+    
+    #Deprecated -------------------------------    
     def getBuffer(self):
         lastpos = self.getLastpos()
         thebuffer = []
@@ -857,7 +875,8 @@ class AlbaEm():
             return channelbuffer
         else:
             raise Exception('getBufferChannel: Wrong channel (1-4)')
-
+    # -------------------------------
+    
     def _digitalOffsetCorrect(self, chans, rang, digitaloffsettarget, correct = 1):
         print "Correcting channels, range, digitaloffsettarget:", chans, rang, digitaloffsettarget
         cmd = []
