@@ -222,7 +222,7 @@ class AlbaEm():
         """
         
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?AUTORANGEMIN %s'%channelChain
             answer = self.ask(command)
@@ -247,7 +247,7 @@ class AlbaEm():
         """
         """
         channelChain = self._prepareChannelsAndValues(autoRangesMin)
-        
+        answer = None
         try:
             command = 'AUTORANGEMIN %s' %channelChain
             answer = self.ask(command)
@@ -292,7 +292,7 @@ class AlbaEm():
         """
         
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?AUTORANGEMAX %s'%channelChain
             answer = self.ask(command)
@@ -317,7 +317,7 @@ class AlbaEm():
         """
         """
         channelChain = self._prepareChannelsAndValues(autoRangesMax)
-        
+        answer = None
         try:
             command = 'AUTORANGEMAX %s' %channelChain
             answer = self.ask(command)
@@ -364,7 +364,7 @@ class AlbaEm():
         """
         
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?AUTORANGE %s'%channelChain
             answer = self.ask(command)
@@ -389,7 +389,7 @@ class AlbaEm():
         """
         """
         channelChain = self._prepareChannelsAndValues(autoRanges)
-        
+        answer = None
         try:
             command = 'AUTORANGE %s' %channelChain
             answer = self.ask(command)
@@ -434,7 +434,7 @@ class AlbaEm():
         '''
         
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?RANGE %s'%channelChain
             answer = self.ask(command)
@@ -459,7 +459,7 @@ class AlbaEm():
             Method for set Ranges.
             @param ranges: list of ranges to set.
         '''
-
+        answer = None
         channelChain = self._prepareChannelsAndValues(ranges)
         try: 
             command = 'RANGE %s'%(channelChain)
@@ -502,7 +502,7 @@ class AlbaEm():
         """
         
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?ENABLE %s'%channelChain
             answer = self.ask(command)
@@ -524,7 +524,7 @@ class AlbaEm():
     def _setEnables(self, enables):
         
         channelChain = self._prepareChannelsAndValues(enables)    
-        
+        answer = None
         try: 
             command = 'ENABLE %s'%(channelChain)
             answer = self.ask(command)
@@ -559,7 +559,7 @@ class AlbaEm():
     def getInvs(self, channels):
             
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?INV %s'%channelChain
             answer = self.ask(command)
@@ -573,6 +573,7 @@ class AlbaEm():
 
     def getDInvs(self, channels):
         dinvs = []
+        answer = None
         try:
             for channel in channels:
                 command = '?GAINCORR 1mA %s'%channel
@@ -601,7 +602,7 @@ class AlbaEm():
     def _setInvs(self, invs):
 
         channelChain = self._prepareChannelsAndValues(invs)
-        
+        answer = None
         try: 
             command = 'INV %s'%(channelChain)
             answer = self.ask(command)
@@ -655,7 +656,7 @@ class AlbaEm():
     def getFilters(self, channels):
             
         channelChain = self._getChannelsFromList(channels)    
-        
+        answer = None
         try:
             command = '?FILTER %s'%channelChain
             answer = self.ask(command)
@@ -673,7 +674,7 @@ class AlbaEm():
     def _setFilters(self, filters):
             
         channelChain = self._prepareChannelsAndValues(filters)
-
+        answer = None
         try: 
             command = 'FILTER %s'%(channelChain)
             print "COMMAND: ", command
@@ -703,7 +704,7 @@ class AlbaEm():
     def getOffsets(self, channels):
                     
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?OFFSET %s'%channelChain
             answer = self.ask(command)
@@ -721,7 +722,7 @@ class AlbaEm():
     def _setOffsets(self, offsets):
             
         channelChain = self._prepareChannelsAndValues(offsets)
-        
+        answer = None
         try: 
             command = 'OFFSET %s'%(channelChain)
             answer = self.ask(command)
@@ -750,7 +751,7 @@ class AlbaEm():
     def getAmpmodes(self, channels):
 
         channelChain = self._getChannelsFromList(channels)    
-        
+        answer = None
         try:
             command = '?AMPMODE %s'%channelChain
             answer = self.ask(command)
@@ -771,7 +772,7 @@ class AlbaEm():
             channelChain = '%s %s %s '%(channelChain, couple[0], couple[1])
             
         channelChain = self._prepareChannelsAndValues(ampModes)
-        
+        answer = None
         try: 
             command = 'AMPMODE %s'%(channelChain)
             answer = self.ask(command)
@@ -797,7 +798,7 @@ class AlbaEm():
         self.setAmpmodes([['1', ampmode], ['2', ampmode], ['3', ampmode], ['4', ampmode]])
 
     def getLdata(self):
-        
+        answer = None
         try:
             command = '?LDATA'
             answer = self.ask(command)
@@ -819,6 +820,7 @@ class AlbaEm():
         return measures, status, lastpos
 
     def getData(self, position):
+        answer = None
         try:
             command = '?DATA %s'%position
             answer = self.ask(command)
@@ -845,6 +847,7 @@ class AlbaEm():
 
     def getAvData(self, channel):
         buffer = []
+        answer = None
         try:
             command = '?AVDATA %s'%channel
             answer = self.ask(command)
@@ -905,12 +908,14 @@ class AlbaEm():
             self.sendSetCmd('OFFSETCORR %s%s'%(rang, cmdpar))
         
     def digitalOffsetCorrect(self, chans, ranges='all', digitaloffsettarget=0, correct = 1):
+        oldAvsamples = self.getAvsamples()
         self.setAvsamples(1000)
         if ranges == 'all':
             ranges = ['100pA', '1nA', '10nA', '100nA', '1uA', '10uA', '100uA', '1mA']
         digitaloffsettarget = (10.0)*digitaloffsettarget
         for rang in ranges:
             self._digitalOffsetCorrect(chans, rang, digitaloffsettarget, correct)
+        self.setAvsamples(oldAvsamples)
 
     def digitalOffsetCheck(self):
         self.digitalOffsetCorrect([1,2,3,4], correct = 0)
@@ -931,7 +936,7 @@ class AlbaEm():
     def getInstantMeasures(self, channels):
             
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?IINST %s'%channelChain
             answer = self.ask(command)
@@ -944,6 +949,7 @@ class AlbaEm():
         return measures, status
 
     def getInstantMeasure(self, channel):
+        answer = None
         try:
             command = '?IINST'
             answer = self.ask(command)
@@ -963,7 +969,7 @@ class AlbaEm():
     def getMeasures(self, channels):
             
         channelChain = self._getChannelsFromList(channels)
-        
+        answer = None
         try:
             command = '?MEAS %s'%channelChain
             answer = self.ask(command)
@@ -976,6 +982,7 @@ class AlbaEm():
         return measures, status
 
     def getMeasure(self, channel):
+        answer = None
         try:
             command = '?MEAS'
             answer = self.ask(command)
@@ -992,6 +999,7 @@ class AlbaEm():
         return self.getMeasures(['1', '2', '3', '4'])
 
     def getAvsamples(self):
+        answer = None
         try:
             command = '?AVSAMPLES'
             answer = self.ask(command)
@@ -1004,6 +1012,7 @@ class AlbaEm():
         return avsamples
 
     def _setAvsamples(self, avsamples):
+        answer = None
         try: 
             command = 'AVSAMPLES %s'%(avsamples)
             answer = self.ask(command)
@@ -1023,6 +1032,7 @@ class AlbaEm():
         self.StartAdc()
 
     def getPoints(self):
+        answer = None
         try:
             command = '?POINTS'
             answer = self.ask(command)
@@ -1035,6 +1045,7 @@ class AlbaEm():
         return points
 
     def _setPoints(self, points):
+        answer = None
         try: 
             command = 'POINTS %s'%(points)
             answer = self.ask(command)
@@ -1053,6 +1064,7 @@ class AlbaEm():
         self.StartAdc()
         
     def getTrigDelay(self):
+        answer = None
         try:
             command = '?TRIGDELAY'
             self.logger.debug('getTrigDelay: Sending command...')
@@ -1066,6 +1078,7 @@ class AlbaEm():
         return trigperiode
 
     def _setTrigDelay(self, delay):
+        answer = None
         try: 
             command = 'TRIGDELAY %s'%(delay)
             answer = self.ask(command)
@@ -1087,6 +1100,7 @@ class AlbaEm():
         self.StartAdc()
 
     def getTrigperiod(self):
+        answer = None
         try:
             command = '?TRIGPERIODE'
             self.logger.debug('getTrigperiod: Sending command...')
@@ -1100,6 +1114,7 @@ class AlbaEm():
         return trigperiode
 
     def _setTrigperiod(self, trigperiod):
+        answer = None
         try: 
             command = 'TRIGPERIODE %s'%(trigperiod)
             answer = self.ask(command)
@@ -1118,6 +1133,7 @@ class AlbaEm():
         self.StartAdc()
 
     def getTrigmode(self):
+        answer = None
         try:
             command = '?TRIGMODE'
             self.logger.debug('getTrigmode: Sending command...')
@@ -1131,6 +1147,7 @@ class AlbaEm():
         return trigmode
 
     def _setTrigmode(self, trigmode):
+        answer = None
         try: 
             command = 'TRIGMODE %s'%(trigmode)
             answer = self.ask(command)
@@ -1149,6 +1166,7 @@ class AlbaEm():
         self.StartAdc()
 
     def getSrate(self):
+        answer = None
         try:
             command = '?SRATE'
             answer = self.ask(command)
@@ -1161,6 +1179,7 @@ class AlbaEm():
         return srate
 
     def _setSrate(self, srate):
+        answer = None
         try: 
             command = 'SRATE %s'%(srate)
             answer = self.ask(command)
@@ -1179,6 +1198,7 @@ class AlbaEm():
         self.StartAdc()
 
     def getState(self):
+        answer = None
         try:
             command = '?STATE'
             answer = self.ask(command)
@@ -1191,6 +1211,7 @@ class AlbaEm():
         return state
 
     def getStatus(self):
+        answer = None
         try:
             command = '?STATUS'
             answer = self.ask(command)
@@ -1203,6 +1224,7 @@ class AlbaEm():
         return status
 
     def getMode(self):
+        answer = None
         try:
             command = '?MODE'
             answer = self.ask(command)
@@ -1223,6 +1245,7 @@ class AlbaEm():
         print 'Avsamples:', self.getAvsamples()
 
     def Start(self):
+        answer = None
         try: 
             command = 'START'
             answer = self.ask(command)
@@ -1233,6 +1256,7 @@ class AlbaEm():
         #self.logger.debug("Start: SEND: %s\t RCVD: %s"%(command, answer))
 
     def StartAdc(self):
+        answer = None
         try: 
             command = 'STARTADC'
             answer = self.ask(command)
@@ -1243,6 +1267,7 @@ class AlbaEm():
         #self.logger.debug("StartAdc: SEND: %s\t RCVD: %s"%(command, answer))
 
     def StopAdc(self):
+        answer = None
         try: 
             command = 'STOPADC'
             answer = self.ask(command)
@@ -1253,6 +1278,7 @@ class AlbaEm():
         #self.logger.debug("StopAdc: SEND: %s\t RCVD: %s"%(command, answer))
 
     def Stop(self):
+        answer = None
         try: 
             command = 'STOP'
             answer = self.ask(command)
@@ -1294,10 +1320,12 @@ class AlbaEm():
         '''
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
         offsets = {}
+        answer = None
         for r in ranges:
-            answer = self.ask('?OFFSETCORR %s'%r)
+            command = '?OFFSETCORR %s' % r
+            answer = self.ask(command)
             offsets[r] = self.extractMultichannel(answer, 2)
-            self.logger.debug(data)
+            self.logger.debug("Stop: SEND: %s\t RCVD: %s"%(command, answer))
         return offsets
 
     def getGainCorrAll(self):
