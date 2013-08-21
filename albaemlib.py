@@ -1327,6 +1327,34 @@ class AlbaEm():
             offsets[r] = self.extractMultichannel(answer, 2)
             self.logger.debug("Stop: SEND: %s\t RCVD: %s"%(command, answer))
         return offsets
+    
+    
+    
+
+    def _setOffsetCorrect(self, rang,  chans):   
+        '''
+            Is called from setOffsetCorrect, 
+            @chans is a list os values and chanels
+            @rang is a String of range.
+        '''
+        s=" "
+        for o in chans:
+            for i in o:
+                s += '%s ' % i
+        print 'Sending command:OFFSETCORR %s%s'%(rang, s)
+        #if correct == 1:
+        self.sendSetCmd('OFFSETCORR %s%s'%(rang, s))
+      
+      
+    def setOffsetCorrect(self, values):
+        '''
+            @chans - Diccionary of Channel and values
+            @ranges - List of Ranges to loop
+        '''
+        for val in values:
+            self._setOffsetCorrect(val, values.get(val))
+       
+
 
     def getGainCorrAll(self):
         ranges = ['1mA', '100uA', '10uA', '1uA', '100nA', '10nA', '1nA', '100pA']
