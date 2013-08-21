@@ -1,0 +1,136 @@
+#!/usr/bin/python
+import PyTango
+import sys
+from pprint import pprint
+from albaemlib import AlbaEm
+
+db = PyTango.Database()
+
+fileDictEmOffset = "fDictEmOffset.dat"
+fileDictEmOffset_all ="fDictEmOffset_all.dat"
+
+def getAlbaEmIps():
+    albaem_servers = db.get_server_list('PyAlbaEm*')
+    albaem_devices = []
+    i=0
+    #find index of Server Name:
+    for e in albaem_servers.value_string:
+        if e == 'PyAlbaEm':
+            break
+        i+=1
+    for s in albaem_servers:
+        albaem_devices.append(db.get_device_class_list(s).value_string[i-1])
+    albaem_ips = []
+    for d in albaem_devices:
+        albaem_ips.append(db.get_device_property(d,'AlbaEmName')['AlbaEmName'][0])
+    return albaem_ips
+
+def rangeComparator(a, b):
+    a_range_unit_factor = a[-2]
+    b_range_unit_factor = b[-2]
+    a_range_value = a[:-2]
+    b_range_value = b[:-2]
+    result = -1
+    if a_range_unit_factor == b_range_unit_factor:
+      if a_range_value > b_range_value:
+        result = 1
+      elif a_range_value == b_range_value:
+        result = 0
+    elif a_range_unit_factor == 'm' or b_range_unit_factor == 'p':
+      result = 1
+    elif a_range_unit_factor == 'u' and b_range_unit_factor != 'm':
+      result = 1
+    elif a_range_unit_factor == 'n' and not b_range_unit_factor in ('m', 'u'):
+      result = 1
+    return result
+    
+def getOffsets(albaem_ip):
+    print('\nAlbaEM: %s' % albaem_ip)
+    try:
+        albaem = AlbaEm(albaem_ip)
+        offset_all = albaem.getOffsetsAll()
+        offsetcorr_all = albaem.getOffsetCorrAll()
+        print('\nACTUAL OFFSETS: ')
+        pprint(repr(offset_all)) 
+        dictEmOffset[albaem_ip] = offset_all     
+        print('\nACTUAL OFFSETCORR: ')
+        k = offsetcorr_all.keys()
+        k.sort(rangeComparator, reverse=True)
+        #pprint(k)
+        rTotal = {}
+        for t  in k:
+            print t,offsetcorr_all.get(t)
+        dictEmOffsetCorr[albaem_ip] = rTotal
+    except:
+        print("Not able to retrive offset values, please check if AlbaEm is reachable...")
+
+def writeFile():
+    fDictEmOffset = open (fileDictEmOffset, "w")
+    fDictEmOffset.write(dictEmOffset.__str__())
+    fDictEmOffset.close()
+
+    fDictEmOffset = open (fileDictEmOffset_all, "w")
+    fDictEmOffset.write(dictEmOffsetCorr.__str__())
+    fDictEmOffset.close()
+
+    print ("Backup Offsets Saved on Files   ./ " + fileDictEmOffset_all + " and " + fileDictEmOffset)
+
+def readFiles():
+
+     fDictEmOff = open (fileDictEmOffset)
+     textFileDictEmOffset = fDictEmOff.read()
+     Offset = eval(textFileDictEmOffset)
+
+     fDictEmOff_all = open (fileDictEmOffset_all)
+     textFileDictEmOffset_all = fDictEmOff_all.read()
+     Offset_all = eval(textFileDictEmOffset_all)
+     return Offset, Offset_all
+
+def restore():
+    '''
+    In restore() method we read a backup files on readFiles() and we write configuration to electrometer.
+    '''
+    Offset, Offset_all = readFiles()
+
+
+    for l in Offset:
+        print l
+        albaem = AlbaEm(l)
+        #print "Offsets of Albaem "+ l +" now: " + str(albaem.getOffsetsAll()) + '\n'
+        #print "Offsets in fileBackup: " + str(Offset.values()) + '\n'
+        albaem.setOffsetsAll(Offset.values())
+        values=""      
+        values= Offset_all.get(l)
+        if values != None:
+            albaem.setOffsetCorrect(values)
+
+
+if __name__ == '__main__':
+
+    albaem_ips = getAlbaEmIps()
+    dictEmOffsetCorr = {}
+    dictEmOffset = {}
+    
+
+    if len(sys.argv) > 1:
+          target = sys.argv[1]    
+          print("\nMostrando Offsets de " + target+ " device")
+          for albaem_ip in albaem_ips:
+              if albaem_ip == target:
+                   getOffsets(albaem_ip)
+    else:
+         print "\nOffsets de todos los dispositivos."
+         for albaem_ip in albaem_ips:
+              getOffsets(albaem_ip)
+
+    #writeFile()
+    
+
+    '''
+    In restore() method we read a backup files and we write configuration to electrometer.
+    '''
+    #restore()
+ 
+    
+
+    
