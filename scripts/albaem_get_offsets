@@ -12,15 +12,20 @@ fileDictEmOffset_all ="fDictEmOffset_all.dat"
 def getAlbaEmIps():
     albaem_servers = db.get_server_list('PyAlbaEm*')
     albaem_devices = []
-    i=0
-    #find index of Server Name:
-    for e in albaem_servers.value_string:
-        if e == 'PyAlbaEm':
-            break
-        i+=1
     for s in albaem_servers:
+        devices = db.get_device_class_list(s)
+        i=0
+        #find index of Server Name:
+        for name in devices:
+            if name == 'PyAlbaEm':
+               break
+            i+=1
+#        print i        
+#        print(devices)
         albaem_devices.append(db.get_device_class_list(s).value_string[i-1])
     albaem_ips = []
+#    print(albaem_servers)
+#    print(albaem_devices)
     for d in albaem_devices:
         albaem_ips.append(db.get_device_property(d,'AlbaEmName')['AlbaEmName'][0])
     return albaem_ips
