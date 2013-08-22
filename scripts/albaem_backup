@@ -56,14 +56,14 @@ def getOffsets(albaem_ip):
         dictEmOffset[albaem_ip] = offset_all      
         print('\nACTUAL OFFSETCORR: ')
         k = offsetcorr_all.keys()
-        k.sort(rangeComparator)
+        k.sort(rangeComparator,reverse=True)
         
         rTotal = {}
         for t  in k:
             rTotal[t]= offsetcorr_all.get(t)
-
+            print t,offsetcorr_all.get(t)
         dictEmOffsetCorr[albaem_ip] = rTotal
-        pprint(rTotal)
+        
     except:
         print("Not able to retrive offset values, please check if AlbaEm is reachable...")
 
