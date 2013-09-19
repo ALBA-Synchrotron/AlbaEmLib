@@ -70,6 +70,9 @@ class AlbaEm():
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #@deprecated: it seems not useful nevermore.
         self.sock.settimeout(0.3)
+        self.offset_corr_alarm = False
+        self.saturation_list = 'List:'
+        self.stateMoving = False
         
 
     def ask(self, cmd, size=8192):
@@ -908,14 +911,30 @@ class AlbaEm():
             self.sendSetCmd('OFFSETCORR %s%s'%(rang, cmdpar))
         
     def digitalOffsetCorrect(self, chans, ranges='all', digitaloffsettarget=0, correct = 1):
+        self.stateMoving=True
         oldAvsamples = self.getAvsamples()
         self.setAvsamples(1000)
+        self.saturation_list = "List: "
+
         if ranges == 'all':
             ranges = ['100pA', '1nA', '10nA', '100nA', '1uA', '10uA', '100uA', '1mA']
         digitaloffsettarget = (10.0)*digitaloffsettarget
         for rang in ranges:
             self._digitalOffsetCorrect(chans, rang, digitaloffsettarget, correct)
         self.setAvsamples(oldAvsamples)
+        self.offset_corr_alarm = False
+        self.stateMoving=False
+        for ran in ranges:
+            offsetcorr_all = self.getOffsetCorrAll()
+            line = offsetcorr_all.get(ran)
+            for l in line:
+                ch = float(l[1])
+                if -10.<= ch >= 10.:
+                    self.offset_corr_alarm = True
+                    self.saturation_list = self.saturation_list + repr(l)
+                    print "Channel",l[0],"range:",ran,"Saturado, valor",l[1]
+        print "Status of OffsetCorrAlarm: ", self.offset_corr_alarm
+
 
     def digitalOffsetCheck(self):
         self.digitalOffsetCorrect([1,2,3,4], correct = 0)
@@ -1208,6 +1227,10 @@ class AlbaEm():
             raise
         self.logger.debug("getState: SEND: %s\t RCVD: %s"%(command, answer))
         self.logger.debug("getState: %s"%(state))
+        if self.offset_corr_alarm == True:
+            state = "ALARM"
+        if self.stateMoving == True:
+            state = "MOVING"
         return state
 
     def getStatus(self):
@@ -1221,6 +1244,9 @@ class AlbaEm():
             raise
         self.logger.debug("getStatus: SEND: %s\t RCVD: %s"%(command, answer))
         self.logger.debug("getStatus: %s"%(status))
+        print "offset_corr_alarm:", self.offset_corr_alarm
+        if self.offset_corr_alarm == True:
+            status = "Current input detected is too high for offset correction for the following" + self.saturation_list + " <channels/range>.\nPlease verify that channel is unconnected before proceeding with the offset correction"
         return status
 
     def getMode(self):
