@@ -70,6 +70,9 @@ class AlbaEm():
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #@deprecated: it seems not useful nevermore.
         self.sock.settimeout(0.3)
+        self.offset_corr_alarm = False
+        self.saturation_list = ''
+        self.stateMoving = False
         
 
     def ask(self, cmd, size=8192):
@@ -290,7 +293,6 @@ class AlbaEm():
             
             @return: list of channels and autoranges
         """
-        
         channelChain = self._getChannelsFromList(channels)
         answer = None
         try:
@@ -881,7 +883,7 @@ class AlbaEm():
     # -------------------------------
     
     def _digitalOffsetCorrect(self, chans, rang, digitaloffsettarget, correct = 1):
-        print "Correcting channels, range, digitaloffsettarget:", chans, rang, digitaloffsettarget
+        print "Correcting channels %s, range %s, digitaloffsettarget:" %(chans, rang), digitaloffsettarget
         cmd = []
         for ch in chans:
             cmd.append(['%s'%ch, rang])
@@ -891,31 +893,49 @@ class AlbaEm():
         time.sleep(2)
         measures = self.ask('?VMEAS').strip('\x00').split(' ')
         #self.logger.debug('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
-        print('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
+        #print('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
         
         measures2 = [float(measures[2]), float(measures[4]), float(measures[6]), float(measures[8])]
         measures3 = []
         for i in range(0, len(measures2)): 
             measures3.append(-measures2[i] + digitaloffsettarget)
         #self.logger.debug(measures3)
-        print measures3
+        #print measures3
         cmdpar = ''
         for i in chans:
             cmdpar = cmdpar + ' %s %s'%(i, measures3[i-1])
-        print cmdpar
-        print 'Correction command:OFFSETCORR %s%s'%(rang, cmdpar)
+        #print cmdpar
+        #print 'Correction command:OFFSETCORR %s%s'%(rang, cmdpar)
         if correct == 1:
             self.sendSetCmd('OFFSETCORR %s%s'%(rang, cmdpar))
         
     def digitalOffsetCorrect(self, chans, ranges='all', digitaloffsettarget=0, correct = 1):
+        self.stateMoving=True
         oldAvsamples = self.getAvsamples()
         self.setAvsamples(1000)
+       
+
         if ranges == 'all':
             ranges = ['100pA', '1nA', '10nA', '100nA', '1uA', '10uA', '100uA', '1mA']
+        
         digitaloffsettarget = (10.0)*digitaloffsettarget
         for rang in ranges:
             self._digitalOffsetCorrect(chans, rang, digitaloffsettarget, correct)
         self.setAvsamples(oldAvsamples)
+        self.offset_corr_alarm = False
+        self.stateMoving=False
+        offsetcorr_all = self.getOffsetCorrAll()
+        self.saturation_list = []
+        for ran in ranges: 
+            line = offsetcorr_all.get(ran)
+            for l in line:
+                ch = float(l[1])
+                if -10.<= ch >= 10.:
+                    self.offset_corr_alarm = True
+                    msg = "Channel %s, Range: %s is saturated with value: %s"%(l[0],ran,l[1]) 
+                    self.saturation_list.append(msg)
+        print "Status of OffsetCorrAlarm: ", self.offset_corr_alarm
+
 
     def digitalOffsetCheck(self):
         self.digitalOffsetCorrect([1,2,3,4], correct = 0)
@@ -1208,6 +1228,10 @@ class AlbaEm():
             raise
         self.logger.debug("getState: SEND: %s\t RCVD: %s"%(command, answer))
         self.logger.debug("getState: %s"%(state))
+        if self.offset_corr_alarm == True:  
+            state = "ALARM"
+        if self.stateMoving == True:
+            state = "MOVING"
         return state
 
     def getStatus(self):
@@ -1221,6 +1245,16 @@ class AlbaEm():
             raise
         self.logger.debug("getStatus: SEND: %s\t RCVD: %s"%(command, answer))
         self.logger.debug("getStatus: %s"%(status))
+        if self.offset_corr_alarm == True:
+            #short_list=[]
+            #for i in range(len(self.saturation_list)):
+            #    it = self.saturation_list[i][0]
+            #    if it not in short_list:
+            #        short_list.append(it)
+            #print short_list    
+            status = "Current input detected is too high for offset correction for the next Channel(s):\n"+ '\n'.join(self.saturation_list) + " \nVerify that channel is disconnected before starting the offset correction"
+        else:
+            status = "Device Status is ON"
         return status
 
     def getMode(self):
