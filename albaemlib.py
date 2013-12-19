@@ -883,14 +883,14 @@ class AlbaEm():
     # -------------------------------
     
     def _digitalOffsetCorrect(self, chans, rang, digitaloffsettarget, correct = 1):
-        print "Correcting channels %s, range %s, digitaloffsettarget:" %(chans, rang), digitaloffsettarget
+        #print "Correcting channels %s, range %s, digitaloffsettarget:" %(chans, rang), digitaloffsettarget
         cmd = []
         for ch in chans:
             cmd.append(['%s'%ch, rang])
         #self.logger.debug(cmd)
         print(cmd)
         self.setRanges(cmd)
-        time.sleep(2)
+        time.sleep(0.2)
         measures = self.ask('?VMEAS').strip('\x00').split(' ')
         #self.logger.debug('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
         #print('%s %s  %s  %s  %s'%(rang, measures[2], measures[4], measures[6], measures[8]))
@@ -934,7 +934,7 @@ class AlbaEm():
                     self.offset_corr_alarm = True
                     msg = "Channel %s, Range: %s is saturated with value: %s"%(l[0],ran,l[1]) 
                     self.saturation_list.append(msg)
-        print "Status of OffsetCorrAlarm: ", self.offset_corr_alarm
+        #print "Status of OffsetCorrAlarm: ", self.offset_corr_alarm
 
 
     def digitalOffsetCheck(self):
